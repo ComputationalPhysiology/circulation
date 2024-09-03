@@ -17,9 +17,8 @@ dependencies = [
 
 [project.optional-dependencies]
 test = ["pytest", "pytest-cov"]
-dev = ["pdbpp", "ipython", "bump2version", "pre-commit"]
-plot = ["matplotlib"]
-docs = ["jupyter-book", "jupytext"]
+demos = ["matplotlib"]
+docs = ["jupyter-book", "jupytext", "circulation[plot]"]
 all = [
     "circulation[test]",
     "circulation[plot]",

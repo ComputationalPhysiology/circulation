@@ -1,0 +1,10 @@
+format: jb-book
+root: README
+
+parts:
+  - caption: Examples
+    chapters:
+    - file: "examples/regazzoni.py"
+  - caption: Python API
+    chapters:
+    - file: "docs/api"
