@@ -54,6 +54,8 @@ class CirculationModel(ABC):
         else:
             self.callback = lambda t: None
         self._verbose = verbose
+        loglevel = logging.DEBUG if verbose else logging.INFO
+        log.setup_logging(level=loglevel)
 
     def _initialize(self):
         self.var = {}

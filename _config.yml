@@ -31,6 +31,7 @@ sphinx:
 
   config:
     html_last_updated_fmt: "%b %d, %Y"
+    bibtex_bibfiles: ["docs/refs.bib"]
     nb_execution_show_tb: True
     suppress_warnings: ["mystnb.unknown_mime_type"]
     nb_custom_formats:  # https://jupyterbook.org/en/stable/file-types/jupytext.html#file-types-custom
@@ -42,5 +43,6 @@ sphinx:
   - 'sphinx.ext.autodoc'
   - 'sphinx.ext.napoleon'
   - 'sphinx.ext.viewcode'
+  - 'sphinxcontrib.bibtex'
 
 exclude_patterns: [".pytest_cache/*" ,"tests", venv, sandbox, examples/3D_0D/third_party, demo, .vcode, .ruff_cache, .github, .git]

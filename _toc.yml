@@ -5,6 +5,7 @@ parts:
   - caption: Examples
     chapters:
     - file: "examples/regazzoni.py"
+    - file: "examples/zenker.py"
   - caption: Python API
     chapters:
     - file: "docs/api"

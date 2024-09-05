@@ -8,10 +8,15 @@ mmHg = units.ureg("mmHg")
 s = units.ureg("s")
 
 
-class Zenkur(base.CirculationModel):
+class Zenker(base.CirculationModel):
     """
-    0D model of the left ventricle only.
+    Zenker model [1]_ of the circulation system to model hemorragic shock.
 
+
+    .. [1] Zenker, S., Rubin, J., & Clermont, G. (2007).
+        From inverse problems in mathematical physiology to
+        quantitative differential diagnoses. PLoS computational biology, 3(11), e204.
+        https://doi.org/10.1371/journal.pcbi.0030204
     """
 
     def __init__(self, parameters: dict[str, float] | None = None, add_units=False):

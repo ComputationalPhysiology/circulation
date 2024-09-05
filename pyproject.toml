@@ -18,7 +18,12 @@ dependencies = [
 [project.optional-dependencies]
 test = ["pytest", "pytest-cov"]
 demos = ["matplotlib"]
-docs = ["jupyter-book", "jupytext", "circulation[demos]"]
+docs = [
+    "jupyter-book",
+     "jupytext",
+     "circulation[demos]",
+     "sphinxcontrib-bibtex",
+]
 all = [
     "circulation[test]",
     "circulation[plot]",
