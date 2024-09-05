@@ -2,7 +2,7 @@ import circulation
 
 
 def test_Zenkur():
-    model = circulation.zenkur.Zenkur()
+    model = circulation.zenker.Zenker()
     results = model.solve(T=1.0, dt=1e-3, dt_eval=0.1)
 
     for k, v in results.items():
