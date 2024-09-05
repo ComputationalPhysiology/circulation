@@ -1,9 +1,9 @@
-from circulation.zenkur import Zenkur
+from circulation.zenker import Zenker
 import matplotlib.pyplot as plt
 import numpy as np
 
 
-circulation = Zenkur()
+circulation = Zenker()
 history = circulation.solve(T=1000.0, dt=1e-3, dt_eval=0.1)
 start_plot = 0
 time = history["time"][start_plot:]
