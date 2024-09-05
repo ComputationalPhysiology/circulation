@@ -1,5 +1,6 @@
-from typing import Callable, Any
+from __future__ import annotations
 
+from typing import Callable, Any
 
 from . import base
 from . import units

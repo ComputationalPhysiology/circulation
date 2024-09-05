@@ -1,7 +1,5 @@
+from __future__ import annotations
 import numpy as np
-# from scipy.integrate import RK45, solve_ivp
-
-
 from . import base
 from . import units
 
