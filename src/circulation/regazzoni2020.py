@@ -12,14 +12,12 @@ s = units.ureg("s")
 
 class Regazzoni2020(base.CirculationModel):
     """
-    Closed loop circulation model.
+    Closed loop circulation model fom Regazzoni et al. [2]_.
 
-    References
-    ----------
-    F. Regazzoni, M. Salvador, P. C. Africa, M. Fedele, L. Dede', A. Quarteroni,
-    "A cardiac electromechanics model coupled with a lumped parameters model for
-    closed-loop blood circulation. Part I: model derivation", arXiv (2020)
-    https://arxiv.org/abs/2011.15040
+    .. [2] F. Regazzoni, M. Salvador, P. C. Africa, M. Fedele, L. Dede', A. Quarteroni,
+        "A cardiac electromechanics model coupled with a lumped parameters model for
+        closed-loop blood circulation. Part I: model derivation", arXiv (2020)
+        https://arxiv.org/abs/2011.15040
 
     """
 
@@ -29,10 +27,13 @@ class Regazzoni2020(base.CirculationModel):
         add_units=False,
         p_LV_func: Callable[[float, float], float] | None = None,
         leak: Callable[[float], float] | None = None,
-        callback: Callable[[float], None] | None = None,
+        callback: Callable[[float, float], None] | None = None,
         verbose: bool = False,
+        comm=None,
     ):
-        super().__init__(parameters, add_units=add_units, callback=callback)
+        super().__init__(
+            parameters, add_units=add_units, callback=callback, verbose=verbose, comm=comm
+        )
         chambers = self.parameters["chambers"]
         valves = self.parameters["valves"]
 

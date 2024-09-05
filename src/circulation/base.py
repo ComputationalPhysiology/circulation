@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Callable, Any
+from typing import Callable, Any, Protocol
 from abc import ABC, abstractmethod
 import json
 from collections import defaultdict
@@ -32,13 +32,20 @@ def remove_units(parameters: dict[str, Any]) -> dict[str, Any]:
     return d
 
 
+class CallBack(Protocol):
+    def __call__(self, t: float, save: bool) -> None:
+        ...
+
+
 class CirculationModel(ABC):
     def __init__(
         self,
         parameters: dict[str, Any] | None = None,
         add_units: bool = False,
-        callback: Callable[[float], None] | None = None,
+        callback: Callable[[float, bool], None] | None = None,
         verbose: bool = False,
+        comm=None,
+        # save_state: Callable[[fl]]
     ):
         self.parameters = type(self).default_parameters()
         if parameters is not None:
@@ -52,10 +59,11 @@ class CirculationModel(ABC):
 
             self.callback = callback
         else:
-            self.callback = lambda t: None
+            self.callback = lambda t, b: None
         self._verbose = verbose
         loglevel = logging.DEBUG if verbose else logging.INFO
         log.setup_logging(level=loglevel)
+        self._comm = comm
 
     def _initialize(self):
         self.var = {}
@@ -72,7 +80,8 @@ class CirculationModel(ABC):
 
     @staticmethod
     @abstractmethod
-    def default_parameters() -> dict[str, Any]: ...
+    def default_parameters() -> dict[str, Any]:
+        ...
 
     @abstractmethod
     def update_static_variables(self, t: float):
@@ -87,7 +96,8 @@ class CirculationModel(ABC):
 
     @staticmethod
     @abstractmethod
-    def default_initial_conditions() -> dict[str, float]: ...
+    def default_initial_conditions() -> dict[str, float]:
+        ...
 
     def time_varying_elastance(self, EA, EB, tC, TC, TR, **kwargs):
         return time_varying_elastance.blanco_ventricle(
@@ -116,7 +126,8 @@ class CirculationModel(ABC):
         )
 
     @abstractmethod
-    def step(self, t: float, dt: float) -> None: ...
+    def step(self, t: float, dt: float) -> None:
+        ...
 
     def solve(
         self,
@@ -151,7 +162,7 @@ class CirculationModel(ABC):
 
         i = 0
         while t < T:
-            self.callback(t)
+            self.callback(t, i % output_every_n_steps == 0)
             self.step(t, dt)
             if i % output_every_n_steps == 0:
                 self.store(t)
@@ -162,20 +173,34 @@ class CirculationModel(ABC):
 
         duration = time.time() - time_start
 
-        logger.info("Done running circulation model in elapsed time %1.4f s" % duration)
+        logger.info(f"Done running circulation model in {duration:.2f} s")
         return self.results
 
     def initialize_output(self):
         self.results = defaultdict(list)
 
     def store(self, t):
-        get = lambda x: x if not self._add_units else x.magnitude
+        get = lambda x: np.copy(x) if not self._add_units else x.magnitude
 
         self.results["time"].append(get(t))
         for k, v in self.state.items():
             self.results[k].append(get(v))
         for k, v in self.var.items():
             self.results[k].append(get(v))
+
+        import matplotlib.pyplot as plt
+
+        if self._comm is not None and self._comm.rank == 0:
+            fig, ax = plt.subplots(3, 1)
+
+            ax[0].plot(self.results["V_LV"], self.results["p_LV"])
+            ax[0].set_xlabel("V [mL]")
+            ax[0].set_ylabel("p [mmHg]")
+
+            ax[1].plot(self.results["time"], self.results["p_LV"])
+            ax[2].plot(self.results["time"], self.results["V_LV"])
+
+            fig.savefig("pv_loop")
 
     def save_state(self, filename):
         with open(filename, mode="w", newline="") as outfile:
