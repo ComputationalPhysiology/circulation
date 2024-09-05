@@ -63,7 +63,7 @@ class Zenkur(base.CirculationModel):
         return {
             "V_ES": 2 * V0lv,
             "V_ED": 3 * V0lv,
-            "S": 0.5,
+            "S": 0.5 * units.ureg("dimensionless"),
             "Va": Va,
             "Vv": Vv,
         }
@@ -116,8 +116,6 @@ class Zenkur(base.CirculationModel):
         self.var["Pcvp"] = Pcvp  # Eq 17
         self.var["IC"] = IC  # Eq 18
         self.var["ICO"] = ICO  # Eq 19
-        self.var["p_LV"] = self.p_LV_func(Vv, t)
-        # breakpoint()
 
         if t > self.parameters["start_withdrawal"] and t < self.parameters["end_withdrawal"]:
             self.var["I_ext"] = self.parameters["flow_withdrawal"]
