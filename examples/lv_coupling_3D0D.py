@@ -27,7 +27,6 @@ THB = 1.0
 dt = 1e-3
 
 
-
 def print_table(time, current_volume, target_volume, pressure):
     from rich.table import Table
 
@@ -64,9 +63,8 @@ def get_cavity_volume_form(mesh, u=None, xshift=5.0):
     return vol_form
 
 
-
-def model(comm):
-    geodir = Path("lv_ellipsoid")
+def model(comm, outdir: Path):
+    geodir = outdir / "geometry"
 
     if not geodir.exists():
         # Make sure we don't create the directory before all
@@ -172,7 +170,7 @@ def model(comm):
 
     vtx = dolfinx.io.VTXWriter(
         problem.geometry.mesh.comm,
-        "displacement.bp",
+        outdir / "displacement.bp",
         [u],
         engine="BP4",
     )
@@ -195,10 +193,22 @@ def model(comm):
         i = t * 1000 % 1000
         return normal_activation[int(i)]
 
-    def callback(t: float, save=False):
+    def callback(model, t: float, save=False):
         if save:
             u.x.array[:] = problem.state.x.array
             vtx.write(t)
+
+            fig, ax = plt.subplots(3, 1)
+
+            ax[0].plot(model.results["V_LV"], model.results["p_LV"])
+            ax[0].set_xlabel("V [mL]")
+            ax[0].set_ylabel("p [mmHg]")
+
+            ax[1].plot(model.results["time"], model.results["p_LV"])
+            ax[2].plot(model.results["time"], model.results["V_LV"])
+
+            fig.savefig(outdir / "pv_loop_incremental")
+
         value = get_activation(t)
 
         logger.debug(f"Time{t} with activation: {value}")
@@ -209,8 +219,8 @@ def model(comm):
     volume_form = get_cavity_volume_form(geometry.mesh, u=u)
     volume = dolfinx.fem.form(volume_form * geometry.ds(geometry.markers["ENDO"][0]))
     initial_volume = geo.mesh.comm.allreduce(
-            dolfinx.fem.assemble_scalar(volume), op=MPI.SUM
-        )
+        dolfinx.fem.assemble_scalar(volume), op=MPI.SUM
+    )
     logger.info(f"Initial volume: {initial_volume}")
 
     @lru_cache
@@ -262,14 +272,22 @@ def model(comm):
 
 
 def main(comm):
-    callback, p_LV_func, initial_volume = model(comm)
+
+    outdir = Path("results-lv_coupling_3D0D")
+    outdir.mkdir(exist_ok=True)
+    callback, p_LV_func, initial_volume = model(comm, outdir=outdir)
 
     mL = ureg.mL
 
     add_units = False
 
     circulation = Regazzoni2020(
-        add_units=add_units, callback=callback, p_LV_func=p_LV_func, verbose=True, comm=comm,
+        add_units=add_units,
+        callback=callback,
+        p_LV_func=p_LV_func,
+        verbose=True,
+        comm=comm,
+        outdir=outdir,
     )
 
     if add_units:
@@ -294,7 +312,7 @@ def main(comm):
     ax[1].plot(history["time"], history["p_LV"])
     ax[2].plot(history["time"], history["V_LV"])
 
-    fig.savefig("pv_loop")
+    fig.savefig(outdir / "pv_loop")
 
 
 if __name__ == "__main__":

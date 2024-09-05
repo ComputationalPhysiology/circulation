@@ -1,5 +1,6 @@
 from __future__ import annotations
 from typing import Callable, Any, Protocol
+from pathlib import Path
 from abc import ABC, abstractmethod
 import json
 from collections import defaultdict
@@ -33,19 +34,23 @@ def remove_units(parameters: dict[str, Any]) -> dict[str, Any]:
 
 
 class CallBack(Protocol):
-    def __call__(self, t: float, save: bool) -> None:
-        ...
+    def __call__(self, model: "CirculationModel", t: float = 0, save: bool = True) -> None: ...
+
+
+def dummy_callback(model: "CirculationModel", t: float = 0, save: bool = True) -> None:
+    pass
 
 
 class CirculationModel(ABC):
     def __init__(
         self,
         parameters: dict[str, Any] | None = None,
+        outdir: Path = Path("results"),
         add_units: bool = False,
-        callback: Callable[[float, bool], None] | None = None,
+        callback: CallBack | None = None,
         verbose: bool = False,
         comm=None,
-        # save_state: Callable[[fl]]
+        callback_save_state: CallBack | None = None,
     ):
         self.parameters = type(self).default_parameters()
         if parameters is not None:
@@ -53,13 +58,23 @@ class CirculationModel(ABC):
         if not add_units:
             self.parameters = remove_units(self.parameters)
         self._add_units = add_units
+        self.outdir = outdir
+        outdir.mkdir(exist_ok=True, parents=True)
 
         if callback is not None:
             assert callable(callback), "callback must be callable"
 
             self.callback = callback
         else:
-            self.callback = lambda t, b: None
+            self.callback = dummy_callback
+
+        if callback_save_state is not None:
+            assert callable(callback_save_state), "callback_save_state must be callable"
+
+            self.callback_save_state = callback_save_state
+        else:
+            self.callback_save_state = dummy_callback
+
         self._verbose = verbose
         loglevel = logging.DEBUG if verbose else logging.INFO
         log.setup_logging(level=loglevel)
@@ -71,6 +86,12 @@ class CirculationModel(ABC):
         self.update_state()
         self.update_static_variables(0.0)
 
+        if self._comm is None or (self._comm is not None and self._comm.rank == 0):
+            # Dump parameters to file
+            (self.outdir / "parameters.json").write_text(json.dumps(self.parameters, indent=2))
+            # Dump initial conditions to file
+            (self.outdir / "initial_conditions.json").write_text(json.dumps(self.state, indent=2))
+
     @property
     def THB(self):
         if self._add_units:
@@ -80,8 +101,7 @@ class CirculationModel(ABC):
 
     @staticmethod
     @abstractmethod
-    def default_parameters() -> dict[str, Any]:
-        ...
+    def default_parameters() -> dict[str, Any]: ...
 
     @abstractmethod
     def update_static_variables(self, t: float):
@@ -96,8 +116,7 @@ class CirculationModel(ABC):
 
     @staticmethod
     @abstractmethod
-    def default_initial_conditions() -> dict[str, float]:
-        ...
+    def default_initial_conditions() -> dict[str, float]: ...
 
     def time_varying_elastance(self, EA, EB, tC, TC, TR, **kwargs):
         return time_varying_elastance.blanco_ventricle(
@@ -126,8 +145,7 @@ class CirculationModel(ABC):
         )
 
     @abstractmethod
-    def step(self, t: float, dt: float) -> None:
-        ...
+    def step(self, t: float, dt: float) -> None: ...
 
     def solve(
         self,
@@ -136,6 +154,7 @@ class CirculationModel(ABC):
         initial_state: dict[str, float] | None = None,
         dt: float = 1e-3,
         dt_eval: float | None = None,
+        checkpoint: int = 0,
     ):
         logger.info("Running circulation model")
         if T is None:
@@ -148,6 +167,11 @@ class CirculationModel(ABC):
             output_every_n_steps = 1
         else:
             output_every_n_steps = np.round(dt_eval / dt)
+
+        if checkpoint > 0:
+            checkoint_every_n_steps = np.round(checkpoint / dt)
+        else:
+            checkoint_every_n_steps = np.inf
 
         self.update_state(state=initial_state)
         self.initialize_output()
@@ -162,25 +186,29 @@ class CirculationModel(ABC):
 
         i = 0
         while t < T:
-            self.callback(t, i % output_every_n_steps == 0)
+            self.callback(self, t, i % output_every_n_steps == 0)
             self.step(t, dt)
             if i % output_every_n_steps == 0:
                 self.store(t)
             if self._verbose:
                 self.print_info()
+
+            if i % checkoint_every_n_steps == 0:
+                self.save_state()
             t += dt
             i += 1
 
         duration = time.time() - time_start
 
         logger.info(f"Done running circulation model in {duration:.2f} s")
+        self.save_state()
         return self.results
 
     def initialize_output(self):
         self.results = defaultdict(list)
 
     def store(self, t):
-        get = lambda x: np.copy(x) if not self._add_units else x.magnitude
+        get = lambda x: float(np.copy(x)) if not self._add_units else x.magnitude
 
         self.results["time"].append(get(t))
         for k, v in self.state.items():
@@ -188,23 +216,10 @@ class CirculationModel(ABC):
         for k, v in self.var.items():
             self.results[k].append(get(v))
 
-        import matplotlib.pyplot as plt
-
-        if self._comm is not None and self._comm.rank == 0:
-            fig, ax = plt.subplots(3, 1)
-
-            ax[0].plot(self.results["V_LV"], self.results["p_LV"])
-            ax[0].set_xlabel("V [mL]")
-            ax[0].set_ylabel("p [mmHg]")
-
-            ax[1].plot(self.results["time"], self.results["p_LV"])
-            ax[2].plot(self.results["time"], self.results["V_LV"])
-
-            fig.savefig("pv_loop")
-
-    def save_state(self, filename):
-        with open(filename, mode="w", newline="") as outfile:
-            json.dump(self.state, outfile, indent=2)
+    def save_state(self):
+        self.callback_save_state(self)
+        (self.outdir / "state.json").write_text(json.dumps(self.state, indent=2))
+        (self.outdir / "results.json").write_text(json.dumps(self.results, indent=2))
 
     @property
     def volumes(self) -> dict[str, float]:

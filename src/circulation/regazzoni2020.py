@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Callable, Any
+from pathlib import Path
 
 from . import base
 from . import units
@@ -27,12 +28,18 @@ class Regazzoni2020(base.CirculationModel):
         add_units=False,
         p_LV_func: Callable[[float, float], float] | None = None,
         leak: Callable[[float], float] | None = None,
-        callback: Callable[[float, float], None] | None = None,
+        callback: base.CallBack | None = None,
         verbose: bool = False,
         comm=None,
+        outdir: Path = Path("results-regazzoni"),
     ):
         super().__init__(
-            parameters, add_units=add_units, callback=callback, verbose=verbose, comm=comm
+            parameters,
+            add_units=add_units,
+            callback=callback,
+            verbose=verbose,
+            comm=comm,
+            outdir=outdir,
         )
         chambers = self.parameters["chambers"]
         valves = self.parameters["valves"]
@@ -141,7 +148,7 @@ class Regazzoni2020(base.CirculationModel):
                     "R_AR": 0.8 * mmHg * s / mL,
                     "C_AR": 1.2 * mL / mmHg,
                     "R_VEN": 0.26 * mmHg * s / mL,
-                    "C_VEN": 60.0 * mL / mmHg,
+                    "C_VEN": 130 * mL / mmHg,
                     "L_AR": 5e-3 * mmHg * s**2 / mL,
                     "L_VEN": 5e-4 * mmHg * s**2 / mL,
                 },
@@ -220,16 +227,16 @@ class Regazzoni2020(base.CirculationModel):
         L_AR_PUL = self.parameters["circulation"]["PUL"]["L_AR"]
         L_VEN_PUL = self.parameters["circulation"]["PUL"]["L_VEN"]
 
-        self.state["V_LA"] += dt * (Q_VEN_PUL - Q_MV - self.leak(t))
+        self.state["V_LA"] += dt * (Q_VEN_PUL - Q_MV)
         self.state["V_LV"] += dt * (Q_MV - Q_AV)
         self.state["V_RA"] += dt * (Q_VEN_SYS - Q_TV)
         self.state["V_RV"] += dt * (Q_TV - Q_PV)
         self.state["p_AR_SYS"] += dt * (Q_AV - Q_AR_SYS) / C_AR_SYS
         self.state["p_VEN_SYS"] += dt * (Q_AR_SYS - Q_VEN_SYS) / C_VEN_SYS
         self.state["p_AR_PUL"] += dt * (Q_PV - Q_AR_PUL) / C_AR_PUL
-        self.state["p_VEN_PUL"] += dt * (Q_AR_PUL - Q_VEN_PUL) / C_VEN_PUL
+        self.state["p_VEN_PUL"] += dt * (Q_AR_PUL - Q_VEN_PUL - self.leak(t)) / C_VEN_PUL
         self.state["Q_AR_SYS"] += -dt * ((R_AR_SYS * Q_AR_SYS + p_VEN_SYS - p_AR_SYS) / L_AR_SYS)
-        self.state["Q_VEN_SYS"] += -dt * (R_VEN_SYS * Q_VEN_SYS + p_RA - p_VEN_SYS) / L_VEN_SYS
+        self.state["Q_VEN_SYS"] += -dt * ((R_VEN_SYS * Q_VEN_SYS + p_RA - p_VEN_SYS) / L_VEN_SYS)
         self.state["Q_AR_PUL"] += -dt * (R_AR_PUL * Q_AR_PUL + p_VEN_PUL - p_AR_PUL) / L_AR_PUL
         self.state["Q_VEN_PUL"] += -dt * (R_VEN_PUL * Q_VEN_PUL + p_LA - p_VEN_PUL) / L_VEN_PUL
 
