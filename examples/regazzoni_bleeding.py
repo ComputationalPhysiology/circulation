@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 
 # Run first Zenker to get the correct heart rate for normal conditions
 zenker_normal = Zenker()
-zenker_normal.solve(T=100.0, dt=1e-3, dt_eval=0.1, initial_state={"S": 0.2})
+zenker_normal.solve(T=100.0, dt=1e-3, dt_eval=0.1)
 HR_normal = zenker_normal.results["fHR"][-1]
 R_TPR_normal = zenker_normal.results["R_TPR"][-1]
 C_PRSW_normal = zenker_normal.results["C_PRSW"][-1]
@@ -23,7 +23,7 @@ print(f"HR_normal = {HR_normal}, R_TPR_normal = {R_TPR_normal}, C_PRSW_normal = 
 # Now we will simulate a bleeding and compute a new heart rate
 blood_loss_parameters = {"start_withdrawal": 1, "end_withdrawal": 2, "flow_withdrawal": -2000, "flow_infusion": 0}
 zenker_bleed = Zenker(parameters=blood_loss_parameters)
-zenker_bleed.solve(T=300.0, dt=1e-3, dt_eval=0.1)
+zenker_bleed.solve(T=300.0, dt=1e-3, dt_eval=0.1, initial_state=zenker_normal.state)
 HR_bleed = zenker_bleed.results["fHR"][-1]
 R_TPR_bleed = zenker_bleed.results["R_TPR"][-1]
 C_PRSW_bleed = zenker_bleed.results["C_PRSW"][-1]
