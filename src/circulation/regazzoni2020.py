@@ -25,9 +25,8 @@ class Regazzoni2020(base.CirculationModel):
     def __init__(
         self,
         parameters: dict[str, Any] | None = None,
-        add_units=False,
         p_LV_func: Callable[[float, float], float] | None = None,
-        leak: Callable[[float], float] | None = None,
+        add_units=False,
         callback: base.CallBack | None = None,
         verbose: bool = False,
         comm=None,
@@ -80,17 +79,16 @@ class Regazzoni2020(base.CirculationModel):
         E_RV = self.time_varying_elastance(**chambers["RV"])
         self.p_RV_func = lambda V, t: E_RV(t) * (V - chambers["RV"]["V0"])
 
-        if leak is not None:
-            self.leak = leak
-        else:
-            self.leak = lambda t: 0.0
-
         self._initialize()
+
+    @property
+    def HR(self) -> float:
+        return self.parameters["HR"]
 
     @staticmethod
     def default_parameters() -> dict[str, Any]:
         return {
-            "BPM": 75.0 * units.ureg("1/minutes"),
+            "HR": 1.0 * units.ureg("Hz"),
             "chambers": {
                 "LA": {
                     "EA": 0.07 * mmHg / mL,
@@ -160,6 +158,14 @@ class Regazzoni2020(base.CirculationModel):
                     "L_AR": 5e-4 * mmHg * s**2 / mL,
                     "L_VEN": 5e-4 * mmHg * s**2 / mL,
                 },
+                "external": {
+                    "start_withdrawal": 0.0 * s,
+                    "end_withdrawal": 0.0 * s,
+                    "start_infusion": 0.0 * s,
+                    "end_infusion": 0.0 * s,
+                    "flow_withdrawal": 0.0 * mL / s,
+                    "flow_infusion": 0.0 * mL / s,
+                },
             },
         }
 
@@ -193,6 +199,7 @@ class Regazzoni2020(base.CirculationModel):
         self.var["Q_PV"] = self.flux_through_valve(
             self.var["p_RV"], self.state["p_AR_PUL"], self.R_PV
         )
+        self.var["I_ext"] = base.external_blood(**self.parameters["circulation"]["external"], t=t)
 
     def step(self, t, dt):
         self.update_static_variables(t)
@@ -206,6 +213,7 @@ class Regazzoni2020(base.CirculationModel):
         Q_AV = self.var["Q_AV"]
         Q_TV = self.var["Q_TV"]
         Q_PV = self.var["Q_PV"]
+        I_ext = self.var["I_ext"]
 
         p_AR_SYS = self.state["p_AR_SYS"]
         p_VEN_SYS = self.state["p_VEN_SYS"]
@@ -232,9 +240,9 @@ class Regazzoni2020(base.CirculationModel):
         self.state["V_RA"] += dt * (Q_VEN_SYS - Q_TV)
         self.state["V_RV"] += dt * (Q_TV - Q_PV)
         self.state["p_AR_SYS"] += dt * (Q_AV - Q_AR_SYS) / C_AR_SYS
-        self.state["p_VEN_SYS"] += dt * (Q_AR_SYS - Q_VEN_SYS) / C_VEN_SYS
+        self.state["p_VEN_SYS"] += dt * (Q_AR_SYS - Q_VEN_SYS + I_ext) / C_VEN_SYS
         self.state["p_AR_PUL"] += dt * (Q_PV - Q_AR_PUL) / C_AR_PUL
-        self.state["p_VEN_PUL"] += dt * (Q_AR_PUL - Q_VEN_PUL - self.leak(t)) / C_VEN_PUL
+        self.state["p_VEN_PUL"] += dt * (Q_AR_PUL - Q_VEN_PUL) / C_VEN_PUL
         self.state["Q_AR_SYS"] += -dt * ((R_AR_SYS * Q_AR_SYS + p_VEN_SYS - p_AR_SYS) / L_AR_SYS)
         self.state["Q_VEN_SYS"] += -dt * ((R_VEN_SYS * Q_VEN_SYS + p_RA - p_VEN_SYS) / L_VEN_SYS)
         self.state["Q_AR_PUL"] += -dt * (R_AR_PUL * Q_AR_PUL + p_VEN_PUL - p_AR_PUL) / L_AR_PUL

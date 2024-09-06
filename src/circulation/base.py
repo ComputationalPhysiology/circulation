@@ -33,12 +33,39 @@ def remove_units(parameters: dict[str, Any]) -> dict[str, Any]:
     return d
 
 
+def external_blood(
+    t: float,
+    start_withdrawal: float,
+    end_withdrawal: float,
+    start_infusion: float,
+    end_infusion: float,
+    flow_withdrawal: float,
+    flow_infusion: float,
+    **kwargs,
+) -> float:
+    if start_withdrawal <= t < end_withdrawal:
+        return flow_withdrawal
+    elif start_infusion <= t < end_infusion:
+        return flow_infusion
+    else:
+        return 0.0
+
+
 class CallBack(Protocol):
     def __call__(self, model: "CirculationModel", t: float = 0, save: bool = True) -> None: ...
 
 
 def dummy_callback(model: "CirculationModel", t: float = 0, save: bool = True) -> None:
     pass
+
+
+def deep_update(d, u):
+    for k, v in u.items():
+        if isinstance(v, dict):
+            d[k] = deep_update(d.get(k, {}), v)
+        else:
+            d[k] = v
+    return d
 
 
 class CirculationModel(ABC):
@@ -54,9 +81,11 @@ class CirculationModel(ABC):
     ):
         self.parameters = type(self).default_parameters()
         if parameters is not None:
-            self.parameters.update(parameters)
+            self.parameters = deep_update(self.parameters, parameters)
+            # self.parameters.update(parameters)
         if not add_units:
             self.parameters = remove_units(self.parameters)
+
         self._add_units = add_units
         self.outdir = outdir
         outdir.mkdir(exist_ok=True, parents=True)
@@ -82,6 +111,7 @@ class CirculationModel(ABC):
 
     def _initialize(self):
         self.var = {}
+        self.results = defaultdict(list)
         self.state = type(self).default_initial_conditions()
         self.update_state()
         self.update_static_variables(0.0)
@@ -93,11 +123,10 @@ class CirculationModel(ABC):
             (self.outdir / "initial_conditions.json").write_text(json.dumps(self.state, indent=2))
 
     @property
-    def THB(self):
-        if self._add_units:
-            return (1 / self.parameters["BPM"]).to(units.ureg("s"))
-
-        return 60.0 / self.parameters["BPM"]
+    @abstractmethod
+    def HR(self) -> float:
+        """Heart rate"""
+        ...
 
     @staticmethod
     @abstractmethod
@@ -125,7 +154,7 @@ class CirculationModel(ABC):
             tC=tC,
             TC=TC,
             TR=TR,
-            THB=self.THB,
+            HR=self.HR,
         )
 
     def flux_through_valve(self, p1, p2, R):
@@ -159,7 +188,7 @@ class CirculationModel(ABC):
         logger.info("Running circulation model")
         if T is None:
             assert num_cycles is not None, "Please provide num_cycles or T"
-            T = self.THB * num_cycles
+            T = self.HR * num_cycles
 
         initial_state = initial_state or dict()
 
@@ -174,7 +203,6 @@ class CirculationModel(ABC):
             checkoint_every_n_steps = np.inf
 
         self.update_state(state=initial_state)
-        self.initialize_output()
         t = 0.0
         if self._add_units:
             t *= units.ureg("s")
@@ -203,9 +231,6 @@ class CirculationModel(ABC):
         logger.info(f"Done running circulation model in {duration:.2f} s")
         self.save_state()
         return self.results
-
-    def initialize_output(self):
-        self.results = defaultdict(list)
 
     def store(self, t):
         get = lambda x: float(np.copy(x)) if not self._add_units else x.magnitude

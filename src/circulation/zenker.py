@@ -19,8 +19,8 @@ class Zenker(base.CirculationModel):
         https://doi.org/10.1371/journal.pcbi.0030204
     """
 
-    def __init__(self, parameters: dict[str, float] | None = None, add_units=False):
-        super().__init__(parameters, add_units=add_units)
+    def __init__(self, parameters: dict[str, float] | None = None, **kwargs):
+        super().__init__(parameters, **kwargs)
         self._initialize()
 
     @staticmethod
@@ -46,12 +46,12 @@ class Zenker(base.CirculationModel):
             "C_PRSW_min": 25.9 * mmHg,
             "C_PRSW_max": 103.8 * mmHg,
             "BPM": 75.0 * units.ureg("1/minutes"),
-            "start_withdrawal": 200.0 * s,
-            "end_withdrawal": 400.0 * s,
-            "start_infusion": 500.0 * s,
-            "end_infusion": 700.0 * s,
-            "flow_withdrawal": -1.0 * mL / s,
-            "flow_infusion": 1.0 * mL / s,
+            "start_withdrawal": 0.0 * s,
+            "end_withdrawal": 0.0 * s,
+            "start_infusion": 0.0 * s,
+            "end_infusion": 0.0 * s,
+            "flow_withdrawal": 0.0 * mL / s,
+            "flow_infusion": 0.0 * mL / s,
         }
 
     @staticmethod
@@ -75,6 +75,10 @@ class Zenker(base.CirculationModel):
         fHR_min = self.parameters["f_HR_min"]
         fHR_max = self.parameters["f_HR_max"]
         return fHR_min + (fHR_max - fHR_min) * S
+
+    @property
+    def HR(self):
+        return self.fHR(self.state["S"])
 
     def R_TPR(self, S):
         R_TPR_min = self.parameters["R_TPR_min"]
@@ -120,12 +124,7 @@ class Zenker(base.CirculationModel):
         self.var["IC"] = IC  # Eq 18
         self.var["ICO"] = ICO  # Eq 19
 
-        if t > self.parameters["start_withdrawal"] and t < self.parameters["end_withdrawal"]:
-            self.var["I_ext"] = self.parameters["flow_withdrawal"]
-        elif t > self.parameters["start_infusion"] and t < self.parameters["end_infusion"]:
-            self.var["I_ext"] = self.parameters["flow_infusion"]
-        else:
-            self.var["I_ext"] = 0.0
+        self.var["I_ext"] = base.external_blood(**self.parameters, t=t)
 
     def p_LV_func(self, V_LV, t=0.0):
         P0_LV = self.parameters["P0_LV"]

@@ -1,21 +1,32 @@
 import numpy as np
 
 
-def blanco_ventricle(EA, EB, tC, TC, TR, THB):
+def blanco_ventricle(
+    EA: float = 1.0,
+    EB: float = 0.1,
+    tC: float = 0.0,
+    TC: float = 0.4,
+    TR: float = 0.2,
+    HR: float = 1.0,
+):
     r"""
     Time-varying elastance model for the left ventricle.
+
     Parameters
     ----------
-    EA : float
-        Maximum elastance.
-    EB : float
-        Minimum elastance.
-    tC : float
-        Time of contraction.
-    TC : float
-        Duration pf contraction.
-    TR : float
-        Duration of Relaxation.
+    EA : float, optional
+        Maximum elastance, by default 1.0
+    EB : float, optional
+        Minimum elastance, by default 0.1
+    tC : float, optional
+        Time of contraction, by default 0.0 seconds
+    TC : float, optional
+        Duration of contraction, by default 0.4 seconds
+    TR : float, optional
+        Duration of relaxation, by default 0.2 seconds
+    HR : float, optional
+        Heart rate, by default 1.0
+
     Returns
     -------
     elastance : function
@@ -50,14 +61,14 @@ def blanco_ventricle(EA, EB, tC, TC, TR, THB):
     time_rest = time_R + TR
 
     # tC <= t <= tC + TC - Contraction
-    case1 = lambda t: (0 <= np.mod(t - tC, THB)) * (np.mod(t - tC, THB) < TC)
+    case1 = lambda t: (0 <= np.mod(t - tC, HR)) * (np.mod(t - tC, HR) < TC)
     # tC + TC <= t <= tC + TC + TR  - Relaxation
-    case2 = lambda t: (0 <= np.mod(t - time_R, THB)) * (np.mod(t - time_R, THB) < TR)
+    case2 = lambda t: (0 <= np.mod(t - time_R, HR)) * (np.mod(t - time_R, HR) < TR)
     # tC + TC + TR <= t <= T - Rest
-    case3 = lambda t: 0 <= np.mod(t - time_rest, THB)
+    case3 = lambda t: 0 <= np.mod(t - time_rest, HR)
 
-    f_contr = lambda t: 0.5 * (1 - np.cos(np.pi / TC * (np.mod(t - tC, THB))))
-    f_relax = lambda t: 0.5 * (1 + np.cos(np.pi / TR * (np.mod(t - time_R, THB))))
+    f_contr = lambda t: 0.5 * (1 - np.cos(np.pi / TC * (np.mod(t - tC, HR))))
+    f_relax = lambda t: 0.5 * (1 + np.cos(np.pi / TR * (np.mod(t - time_R, HR))))
     f_rest = lambda t: 0
 
     e = lambda t: f_contr(t) * case1(t) + f_relax(t) * case2(t) + f_rest(t) * case3(t)
