@@ -22,3 +22,5 @@ def setup_logging(level=logging.DEBUG, comm=None):
         level=level,
         handlers=handlers,
     )
+    for name in ["matplotlib"]:
+        logging.getLogger(name).setLevel(logging.WARNING)
