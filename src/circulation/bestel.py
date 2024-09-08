@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 logger = logging.getLogger(__name__)
 
 
-@dataclass(slots=True)
+@dataclass
 class BestelActivation:
     r"""Active stress model from the Bestel model [3]_.
 
@@ -107,7 +107,7 @@ class BestelActivation:
         return -abs(a(t)) * tau + ps["sigma_0"] * max(a(t), 0)
 
 
-@dataclass(slots=True)
+@dataclass
 class BestelPressure:
     r"""Time-dependent pressure derived from the Bestel model [3]_.
 
