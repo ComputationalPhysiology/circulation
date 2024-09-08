@@ -1,56 +1,27 @@
+"""
+Bestel model for active stress and pressure {cite}`bestel2001biomechanical
+"""
+
+from __future__ import annotations
 import math
-from typing import Dict
-from typing import Optional
-from typing import Tuple
-
-import numpy as np
-import scipy.integrate
+import logging
+from dataclasses import dataclass, field
 
 
-def default_parameters() -> Dict[str, float]:
-    r"""Default parameters for the activation model
-
-    Returns
-    -------
-    Dict[str, float]
-        Default parameters
-
-    Notes
-    -----
-    The default parameters are
-
-    .. math::
-        t_{\mathrm{sys}} &= 0.16 \\
-        t_{\mathrm{dias}} &= 0.484 \\
-        \gamma &= 0.005 \\
-        a_{\mathrm{max}} &= 5.0 \\
-        a_{\mathrm{min}} &= -30.0 \\
-        \sigma_0 &= 150e3 \\
-    """
-    return dict(
-        t_sys=0.16,
-        t_dias=0.484,
-        gamma=0.005,
-        a_max=5.0,
-        a_min=-30.0,
-        sigma_0=150e3,
-    )
+logger = logging.getLogger(__name__)
 
 
-def activation_function(
-    t_span: Tuple[float, float],
-    t_eval: Optional[np.ndarray] = None,
-    parameters: Optional[Dict[str, float]] = None,
-) -> np.ndarray:
+@dataclass
+class BestelActivation:
     r"""Active stress model from the Bestel model [3]_.
 
     Parameters
     ----------
-    t_span : Tuple[float, float]
+    t_span : tuple[float, float]
         A tuple representing start and end of time
-    parameters : Dict[str, float]
+    parameters : dict[str, float]
         Parameters used in the model, see :func:`default_parameters`
-    t_eval : Optional[np.ndarray], optional
+    t_eval : np.ndarray, optional
         Time points to evaluate the solution, by default None.
         If not provided, the default points from `scipy.integrate.solve_ivp`
         will be used
@@ -83,28 +54,233 @@ def activation_function(
         Berlin Heidelberg, 2001, pp. 1159{1161.
 
     """
-    params = default_parameters()
-    if parameters is not None:
-        params.update(parameters)
 
-    # print(f"Solving active stress model with parameters: {pprint.pformat(params)}")
+    parameters: dict[str, float] = field(default_factory=dict)
 
-    f = (
-        lambda t: 0.25
-        * (1 + math.tanh((t - params["t_sys"]) / params["gamma"]))
-        * (1 - math.tanh((t - params["t_dias"]) / params["gamma"]))
-    )
-    a = lambda t: params["a_max"] * f(t) + params["a_min"] * (1 - f(t))
+    def __post_init__(self):
+        parameters = type(self).default_parameters()
+        parameters.update(self.parameters)
+        self.parameters = parameters
+        logger.info("Solving pressure model with parameters:", parameters)
 
-    def rhs(t, tau):
-        return -abs(a(t)) * tau + params["sigma_0"] * max(a(t), 0)
+    @staticmethod
+    def default_parameters() -> dict[str, float]:
+        r"""Default parameters for the activation model
 
-    res = scipy.integrate.solve_ivp(
-        rhs,
-        t_span,
-        [0.0],
-        t_eval=t_eval,
-        method="Radau",
-    )
+        Returns
+        -------
+        dict[str, float]
+            Default parameters
 
-    return res.y.squeeze()
+        Notes
+        -----
+        The default parameters are
+
+        .. math::
+            t_{\mathrm{sys}} &= 0.16 \\
+            t_{\mathrm{dias}} &= 0.484 \\
+            \gamma &= 0.005 \\
+            a_{\mathrm{max}} &= 5.0 \\
+            a_{\mathrm{min}} &= -30.0 \\
+            \sigma_0 &= 150e3 \\
+        """
+        return dict(
+            t_sys=0.16,
+            t_dias=0.484,
+            gamma=0.005,
+            a_max=5.0,
+            a_min=-30.0,
+            sigma_0=150e3,
+        )
+
+    def __call__(self, t, tau):
+        ps = self.parameters
+
+        # print(f"Solving active stress model with parameters: {pprint.pformat(params)}")
+
+        f = (
+            lambda t: 0.25
+            * (1 + math.tanh((t - ps["t_sys"]) / ps["gamma"]))
+            * (1 - math.tanh((t - ps["t_dias"]) / ps["gamma"]))
+        )
+        a = lambda t: ps["a_max"] * f(t) + ps["a_min"] * (1 - f(t))
+
+        return -abs(a(t)) * tau + ps["sigma_0"] * max(a(t), 0)
+
+
+@dataclass
+class BestelPressure:
+    r"""Time-dependent pressure derived from the Bestel model [3]_.
+
+    Parameters
+    ----------
+    t_span : tuple[float, float]
+        A tuple representing start and end of time
+    parameters : dict[str, float]
+        Parameters used in the model, see :func:`default_parameters`
+    t_eval : np.ndarray, optional
+        Time points to evaluate the solution, by default None.
+        If not provided, the default points from `scipy.integrate.solve_ivp`
+        will be used
+
+    Returns
+    -------
+    np.ndarray
+        An array of pressure points
+
+    Notes
+    -----
+    We consider a time-dependent pressure derived from the Bestel model.
+    The solution :math:`p = p(t)` is characterized as solution to the evolution equation
+
+    .. math::
+        \dot{p}(t) = -|b(t)|p(t) + \sigma_{\mathrm{mid}}|b(t)|_+
+        + \sigma_{\mathrm{pre}}|g_{\mathrm{pre}}(t)|
+
+    being b(\cdot) the activation function described below:
+
+    .. math::
+        b(t) =& a_{\mathrm{pre}}(t) + \alpha_{\mathrm{pre}}g_{\mathrm{pre}}(t)
+        + \alpha_{\mathrm{mid}} \\
+        a_{\mathrm{pre}}(t) :=& \alpha_{\mathrm{max}} \cdot f_{\mathrm{pre}}(t)
+        + \alpha_{\mathrm{min}} \cdot (1 - f_{\mathrm{pre}}(t)) \\
+        f_{\mathrm{pre}}(t) =& S^+(t - t_{\mathrm{sys}-\mathrm{pre}}) \cdot
+         S^-(t  t_{\mathrm{dias} - \mathrm{pre}}) \\
+        g_{\mathrm{pre}}(t) =& S^-(t - t_{\mathrm{dias} - \mathrm{pre}})
+
+    with :math:`S^{\pm}` given by
+
+    .. math::
+        S^{\pm}(\Delta t) = \frac{1}{2}(1 \pm \mathrm{tanh}(\frac{\Delta t}{\gamma}))
+
+    """
+
+    parameters: dict[str, float] = field(default_factory=dict)
+
+    def __post_init__(self):
+        parameters = type(self).default_parameters()
+        parameters.update(self.parameters)
+        self.parameters = parameters
+        logger.info("Solving pressure model with parameters: ", parameters)
+
+    @staticmethod
+    def default_parameters() -> dict[str, float]:
+        r"""Default parameters for the pressure model for LV only
+
+        Returns
+        -------
+        dict[str, float]
+            Default parameters
+
+        Notes
+        -----
+        The default parameters are
+
+        .. math::
+            t_{\mathrm{sys} - \mathrm{pre}} &= 0.17 \\
+            t_{\mathrm{dias} - \mathrm{pre}} &= 0.484 \\
+            \gamma &= 0.005 \\
+            a_{\mathrm{max}} &= 5.0 \\
+            a_{\mathrm{min}} &= -30.0 \\
+            \alpha_{\mathrm{pre}} &= 5.0 \\
+            \alpha_{\mathrm{mid}} &= 1.0 \\
+            \sigma_{\mathrm{pre}} &= 7000.0 \\
+            \sigma_{\mathrm{mid}} &= 16000.0 \\
+        """
+        return dict(
+            t_sys_pre=0.17,
+            t_dias_pre=0.484,
+            gamma=0.005,
+            a_max=5.0,
+            a_min=-30.0,
+            alpha_pre=5.0,
+            alpha_mid=1.0,
+            sigma_pre=7000.0,
+            sigma_mid=16000.0,
+        )
+
+    @staticmethod
+    def default_lv_parameters() -> dict[str, float]:
+        r"""Default parameters for the LV pressure model in BiV model
+
+        Returns
+        -------
+        dict[str, float]
+            Default parameters
+
+        Notes
+        -----
+        The default parameters are
+
+        .. math::
+            t_{\mathrm{sys} - \mathrm{pre}} &= 0.17 \\
+            t_{\mathrm{dias} - \mathrm{pre}} &= 0.484 \\
+            \gamma &= 0.005 \\
+            a_{\mathrm{max}} &= 5.0 \\
+            a_{\mathrm{min}} &= -30.0 \\
+            \alpha_{\mathrm{pre}} &= 5.0 \\
+            \alpha_{\mathrm{mid}} &= 15.0 \\
+            \sigma_{\mathrm{pre}} &= 12000.0 \\
+            \sigma_{\mathrm{mid}} &= 16000.0 \\
+        """
+        return dict(
+            t_sys_pre=0.17,
+            t_dias_pre=0.484,
+            gamma=0.005,
+            a_max=5.0,
+            a_min=-30.0,
+            alpha_pre=5.0,
+            alpha_mid=15.0,
+            sigma_pre=12000.0,
+            sigma_mid=16000.0,
+        )
+
+    @staticmethod
+    def default_rv_parameters() -> dict[str, float]:
+        r"""Default parameters for the RV pressure model in BiV model
+
+        Returns
+        -------
+        Dict[str, float]
+            Default parameters
+
+        Notes
+        -----
+        The default parameters are
+
+        .. math::
+            t_{\mathrm{sys} - \mathrm{pre}} &= 0.17 \\
+            t_{\mathrm{dias} - \mathrm{pre}} &= 0.484 \\
+            \gamma &= 0.005 \\
+            a_{\mathrm{max}} &= 5.0 \\
+            a_{\mathrm{min}} &= -30.0 \\
+            \alpha_{\mathrm{pre}} &= 5.0 \\
+            \alpha_{\mathrm{mid}} &= 10.0 \\
+            \sigma_{\mathrm{pre}} &= 3000.0 \\
+            \sigma_{\mathrm{mid}} &= 4000.0 \\
+        """
+        return dict(
+            t_sys_pre=0.17,
+            t_dias_pre=0.484,
+            gamma=0.005,
+            a_max=5.0,
+            a_min=-30.0,
+            alpha_pre=1.0,
+            alpha_mid=10.0,
+            sigma_pre=3000.0,
+            sigma_mid=4000.0,
+        )
+
+    def __call__(self, t, p):
+        ps = self.parameters
+        f = (
+            lambda t: 0.25
+            * (1 + math.tanh((t - ps["t_sys_pre"]) / ps["gamma"]))
+            * (1 - math.tanh((t - ps["t_dias_pre"]) / ps["gamma"]))
+        )
+        a = lambda t: ps["a_max"] * f(t) + ps["a_min"] * (1 - f(t))
+
+        f_pre = lambda t: 0.5 * (1 - math.tanh((t - ps["t_dias_pre"]) / ps["gamma"]))
+        b = lambda t: a(t) + ps["alpha_pre"] * f_pre(t) + ps["alpha_mid"]
+
+        return -abs(b(t)) * p + ps["sigma_mid"] * max(b(t), 0) + ps["sigma_pre"] * max(f_pre(t), 0)

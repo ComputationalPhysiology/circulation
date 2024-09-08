@@ -16,8 +16,8 @@ dependencies = [
 
 
 [project.optional-dependencies]
-test = ["pytest", "pytest-cov"]
-demos = ["matplotlib"]
+test = ["pytest", "pytest-cov", "scipy"]
+demos = ["matplotlib", "scipy"]
 docs = [
     "jupyter-book",
      "jupytext",
