@@ -2,6 +2,7 @@
 Bestel model for active stress and pressure {cite}`bestel2001biomechanical
 """
 
+from __future__ import annotations
 import math
 import logging
 from dataclasses import dataclass, field
