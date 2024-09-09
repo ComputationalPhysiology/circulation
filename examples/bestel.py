@@ -2,14 +2,16 @@
 
 # In this example we will show the both the pressure and activation model from Bestel et al. {cite}`bestel2001biomechanical`.
 
+import logging
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.integrate import solve_ivp
 
-from circulation import bestel
+from circulation import bestel, log
 
 # First let us define a time array
 
+log.setup_logging(level=logging.INFO)
 t_eval = np.linspace(0, 1, 200)
 
 # Now we will solve the activation model

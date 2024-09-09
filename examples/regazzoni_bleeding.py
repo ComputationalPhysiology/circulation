@@ -4,10 +4,12 @@
 # We use the Zenker model to find the heart rate for normal conditions and then we simulate a bleeding event and compute the new heart rate.
 # Simularly we also adjust the systemic resistance and the contractility of the heart chambers to simulate the effects of bleeding.
 
-import numpy as np
+from circulation.log import setup_logging
 from circulation.regazzoni2020 import Regazzoni2020
 from circulation.zenker import Zenker
 import matplotlib.pyplot as plt
+
+setup_logging()
 
 
 # Run first Zenker to get the correct heart rate for normal conditions

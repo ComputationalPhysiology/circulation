@@ -59,6 +59,14 @@ def dummy_callback(model: "CirculationModel", t: float = 0, save: bool = True) -
     pass
 
 
+def recuursive_table(d: dict[str, Any], table: Table, prefix: str = ""):
+    for k, v in d.items():
+        if isinstance(v, dict):
+            recuursive_table(v, table, prefix=f"{prefix}.{k}")
+        else:
+            table.add_row(f"{prefix}.{k}".lstrip("."), str(v))
+
+
 def deep_update(d, u):
     for k, v in u.items():
         if isinstance(v, dict):
@@ -82,7 +90,13 @@ class CirculationModel(ABC):
         self.parameters = type(self).default_parameters()
         if parameters is not None:
             self.parameters = deep_update(self.parameters, parameters)
-            # self.parameters.update(parameters)
+
+        table = Table(title=f"Circulation model parameters ({type(self).__name__})")
+        table.add_column("Parameter")
+        table.add_column("Value")
+        recuursive_table(self.parameters, table)
+        logger.info(f"\n{log.log_table(table)}")
+
         if not add_units:
             self.parameters = remove_units(self.parameters)
 

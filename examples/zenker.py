@@ -2,11 +2,13 @@
 
 # This example shows how to use the Zenker model {cite:p}`zenker2019correction`. The Zenker model is a 0D model that simulates the cardiac cycle.
 
+from circulation.log import setup_logging
 from circulation.zenker import Zenker
 import matplotlib.pyplot as plt
 import numpy as np
 
 
+setup_logging()
 circulation = Zenker(
     parameters={
         "start_withdrawal": 100,

@@ -35,7 +35,7 @@ ax.set_xlabel("V [mL]")
 ax.set_ylabel("p [mmHg]")
 plt.show()
 ```
-![_](https://github.com/ComputationalPhysiology/circulation/blob/main/docs/_static/regazzoni.png)
+![_](https://raw.githubusercontent.com/ComputationalPhysiology/circulation/main/docs/_static/regazzoni.png)
 
 See more examples in the [documentation](https://computationalphysiology.github.io/circulation).
 

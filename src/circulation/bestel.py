@@ -6,6 +6,9 @@ from __future__ import annotations
 import math
 import logging
 from dataclasses import dataclass, field
+from rich.table import Table
+
+from . import log
 
 
 logger = logging.getLogger(__name__)
@@ -61,7 +64,12 @@ class BestelActivation:
         parameters = type(self).default_parameters()
         parameters.update(self.parameters)
         self.parameters = parameters
-        logger.info("Solving pressure model with parameters:", parameters)
+        table = Table(title="Bestel activation model parameters")
+        table.add_column("Parameter")
+        table.add_column("Value")
+        for k, v in parameters.items():
+            table.add_row(k, str(v))
+        logger.info(f"\n{log.log_table(table)}")
 
     @staticmethod
     def default_parameters() -> dict[str, float]:
@@ -161,7 +169,12 @@ class BestelPressure:
         parameters = type(self).default_parameters()
         parameters.update(self.parameters)
         self.parameters = parameters
-        logger.info("Solving pressure model with parameters: ", parameters)
+        table = Table(title="Bestel pressure model parameters")
+        table.add_column("Parameter")
+        table.add_column("Value")
+        for k, v in parameters.items():
+            table.add_row(k, str(v))
+        logger.info(f"\n{log.log_table(table)}")
 
     @staticmethod
     def default_parameters() -> dict[str, float]:
