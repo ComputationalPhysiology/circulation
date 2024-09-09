@@ -157,7 +157,7 @@ class CirculationModel(ABC):
             HR=self.HR,
         )
 
-    def flux_through_valve(self, p1, p2, R):
+    def flux_through_valve(self, p1: float, p2: float, R: Callable[[float, float], float]) -> float:
         return (p1 - p2) / R(p1, p2)
 
     def _R(

@@ -14,6 +14,12 @@ history = circulation.solve(
 )
 circulation.print_info()
 
+fig, ax = plt.subplots()
+ax.plot(history["V_LV"], history["p_LV"])
+ax.set_xlabel("V [mL]")
+ax.set_ylabel("p [mmHg]")
+fig.savefig("../docs/_static/regazzoni.png")
+
 fig, ax = plt.subplots(1, 2, sharex=True, sharey=True, figsize=(10, 5))
 ax[0].plot(history["V_LV"], history["p_LV"])
 ax[0].set_xlabel("V [mL]")
