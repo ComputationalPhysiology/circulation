@@ -31,6 +31,7 @@ class Regazzoni2020(base.CirculationModel):
         verbose: bool = False,
         comm=None,
         outdir: Path = Path("results-regazzoni"),
+        initial_state: dict[str, float] | None = None,
     ):
         super().__init__(
             parameters,
@@ -39,6 +40,7 @@ class Regazzoni2020(base.CirculationModel):
             verbose=verbose,
             comm=comm,
             outdir=outdir,
+            initial_state=initial_state,
         )
         chambers = self.parameters["chambers"]
         valves = self.parameters["valves"]
