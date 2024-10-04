@@ -86,10 +86,17 @@ class CirculationModel(ABC):
         verbose: bool = False,
         comm=None,
         callback_save_state: CallBack | None = None,
+        initial_state: dict[str, float] | None = None,
     ):
         self.parameters = type(self).default_parameters()
         if parameters is not None:
             self.parameters = deep_update(self.parameters, parameters)
+
+        self._add_units = add_units
+
+        self.state = type(self).default_initial_conditions()
+        if initial_state is not None:
+            self.state.update(initial_state)
 
         table = Table(title=f"Circulation model parameters ({type(self).__name__})")
         table.add_column("Parameter")
@@ -97,10 +104,16 @@ class CirculationModel(ABC):
         recuursive_table(self.parameters, table)
         logger.info(f"\n{log.log_table(table)}")
 
+        table = Table(title=f"Circulation model initial states ({type(self).__name__})")
+        table.add_column("State")
+        table.add_column("Value")
+        recuursive_table(self.state, table)
+        logger.info(f"\n{log.log_table(table)}")
+
         if not add_units:
             self.parameters = remove_units(self.parameters)
+            self.state = remove_units(self.state)
 
-        self._add_units = add_units
         self.outdir = outdir
         outdir.mkdir(exist_ok=True, parents=True)
 
@@ -126,8 +139,7 @@ class CirculationModel(ABC):
     def _initialize(self):
         self.var = {}
         self.results = defaultdict(list)
-        self.state = type(self).default_initial_conditions()
-        self.update_state()
+
         self.update_static_variables(0.0)
 
         if self._comm is None or (self._comm is not None and self._comm.rank == 0):
@@ -149,13 +161,6 @@ class CirculationModel(ABC):
     @abstractmethod
     def update_static_variables(self, t: float):
         pass
-
-    def update_state(self, state: dict[str, float] | None = None):
-        if state is not None:
-            self.state.update(state)
-
-        if not self._add_units:
-            self.state = remove_units(self.state)
 
     @staticmethod
     @abstractmethod
@@ -216,11 +221,15 @@ class CirculationModel(ABC):
         else:
             checkoint_every_n_steps = np.inf
 
-        self.update_state(state=initial_state)
+        if initial_state is not None:
+            self.state.update(initial_state)
+
         t = 0.0
         if self._add_units:
             t *= units.ureg("s")
             dt *= units.ureg("s")
+        else:
+            self.state = remove_units(self.state)
 
         self.store(t)
 
