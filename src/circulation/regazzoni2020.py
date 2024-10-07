@@ -25,7 +25,8 @@ class Regazzoni2020(base.CirculationModel):
     def __init__(
         self,
         parameters: dict[str, Any] | None = None,
-        p_LV_func: Callable[[float, float], float] | None = None,
+        p_LV: Callable[[float, float], float] | None = None,
+        p_RV: Callable[[float, float], float] | None = None,
         add_units=False,
         callback: base.CallBack | None = None,
         verbose: bool = False,
@@ -66,20 +67,23 @@ class Regazzoni2020(base.CirculationModel):
         )
 
         E_LA = self.time_varying_elastance(**chambers["LA"])
-        self.p_LA_func = lambda V, t: E_LA(t) * (V - chambers["LA"]["V0"])
+        self.p_LA = lambda V, t: E_LA(t) * (V - chambers["LA"]["V0"])
 
-        if p_LV_func is not None:
-            self.p_LV_func = p_LV_func
+        if p_LV is not None:
+            self.p_LV = p_LV
         else:
             # Use default time varying elastance model
             E_LV = self.time_varying_elastance(**chambers["LV"])
-            self.p_LV_func = lambda V, t: E_LV(t) * (V - chambers["LV"]["V0"])
+            self.p_LV = lambda V, t: E_LV(t) * (V - chambers["LV"]["V0"])
 
         E_RA = self.time_varying_elastance(**chambers["RA"])
-        self.p_RA_func = lambda V, t: E_RA(t) * (V - chambers["RA"]["V0"])
+        self.p_RA = lambda V, t: E_RA(t) * (V - chambers["RA"]["V0"])
 
-        E_RV = self.time_varying_elastance(**chambers["RV"])
-        self.p_RV_func = lambda V, t: E_RV(t) * (V - chambers["RV"]["V0"])
+        if p_RV is not None:
+            self.p_RV = p_RV
+        else:
+            E_RV = self.time_varying_elastance(**chambers["RV"])
+            self.p_RV = lambda V, t: E_RV(t) * (V - chambers["RV"]["V0"])
 
         self._initialize()
 
@@ -188,41 +192,71 @@ class Regazzoni2020(base.CirculationModel):
             "Q_VEN_PUL": 0.0 * mL / s,
         }
 
-    def update_static_variables(self, t):
-        self.var["p_LA"] = self.p_LA_func(self.state["V_LA"], t)
-        self.var["p_LV"] = self.p_LV_func(self.state["V_LV"], t)
-        self.var["p_RA"] = self.p_RA_func(self.state["V_RA"], t)
-        self.var["p_RV"] = self.p_RV_func(self.state["V_RV"], t)
-        self.var["Q_MV"] = self.flux_through_valve(self.var["p_LA"], self.var["p_LV"], self.R_MV)
-        self.var["Q_AV"] = self.flux_through_valve(
-            self.var["p_LV"], self.state["p_AR_SYS"], self.R_AV
-        )
-        self.var["Q_TV"] = self.flux_through_valve(self.var["p_RA"], self.var["p_RV"], self.R_TV)
-        self.var["Q_PV"] = self.flux_through_valve(
-            self.var["p_RV"], self.state["p_AR_PUL"], self.R_PV
-        )
-        self.var["I_ext"] = base.external_blood(**self.parameters["circulation"]["external"], t=t)
+    @staticmethod
+    def var_names() -> list[str]:
+        return [
+            "p_LA",
+            "p_LV",
+            "p_RA",
+            "p_RV",
+            "Q_MV",
+            "Q_AV",
+            "Q_TV",
+            "Q_PV",
+            "I_ext",
+        ]
 
-    def step(self, t, dt):
-        self.update_static_variables(t)
+    def update_static_variables(self, t: float, y: list[float]):
+        V_LA = y[0]
+        V_LV = y[1]
+        V_RA = y[2]
+        V_RV = y[3]
+        p_AR_SYS = y[4]
+        p_VEN_SYS = y[5]
+        p_AR_PUL = y[6]
+        p_VEN_PUL = y[7]
+        Q_AR_SYS = y[8]
+        Q_VEN_SYS = y[9]
+        Q_AR_PUL = y[10]
+        Q_VEN_PUL = y[11]
 
-        Q_VEN_PUL = self.state["Q_VEN_PUL"]
-        Q_AR_PUL = self.state["Q_AR_PUL"]
-        Q_VEN_SYS = self.state["Q_VEN_SYS"]
-        Q_AR_SYS = self.state["Q_AR_SYS"]
+        self.var[0] = self.p_LA(V_LA, t)
+        self.var[1] = self.p_LV(V_LV, t)
+        self.var[2] = self.p_RA(V_RA, t)
+        self.var[3] = self.p_RV(V_RV, t)
+        self.var[4] = self.flux_through_valve(self.var[0], self.var[1], self.R_MV)
+        self.var[5] = self.flux_through_valve(self.var[1], p_AR_SYS, self.R_AV)
+        self.var[6] = self.flux_through_valve(self.var[2], self.var[3], self.R_TV)
+        self.var[7] = self.flux_through_valve(self.var[3], p_AR_PUL, self.R_PV)
+        self.var[8] = base.external_blood(**self.parameters["circulation"]["external"], t=t)
+        return self.var
 
-        Q_MV = self.var["Q_MV"]
-        Q_AV = self.var["Q_AV"]
-        Q_TV = self.var["Q_TV"]
-        Q_PV = self.var["Q_PV"]
-        I_ext = self.var["I_ext"]
+    def rhs(self, t, y, var=None):
+        V_LA = y[0]
+        V_LV = y[1]
+        V_RA = y[2]
+        V_RV = y[3]
+        p_AR_SYS = y[4]
+        p_VEN_SYS = y[5]
+        p_AR_PUL = y[6]
+        p_VEN_PUL = y[7]
+        Q_AR_SYS = y[8]
+        Q_VEN_SYS = y[9]
+        Q_AR_PUL = y[10]
+        Q_VEN_PUL = y[11]
 
-        p_AR_SYS = self.state["p_AR_SYS"]
-        p_VEN_SYS = self.state["p_VEN_SYS"]
-        p_AR_PUL = self.state["p_AR_PUL"]
-        p_VEN_PUL = self.state["p_VEN_PUL"]
-        p_RA = self.var["p_RA"]
-        p_LA = self.var["p_LA"]
+        if var is None:
+            var = self.update_static_variables(t, y)
+
+        p_LA = var[0]
+        p_LV = var[1]
+        p_RA = var[2]
+        p_RV = var[3]
+        Q_MV = var[4]
+        Q_AV = var[5]
+        Q_TV = var[6]
+        Q_PV = var[7]
+        I_ext = var[8]
 
         C_VEN_SYS = self.parameters["circulation"]["SYS"]["C_VEN"]
         C_AR_SYS = self.parameters["circulation"]["SYS"]["C_AR"]
@@ -237,18 +271,23 @@ class Regazzoni2020(base.CirculationModel):
         L_AR_PUL = self.parameters["circulation"]["PUL"]["L_AR"]
         L_VEN_PUL = self.parameters["circulation"]["PUL"]["L_VEN"]
 
-        self.state["V_LA"] += dt * (Q_VEN_PUL - Q_MV)
-        self.state["V_LV"] += dt * (Q_MV - Q_AV)
-        self.state["V_RA"] += dt * (Q_VEN_SYS - Q_TV)
-        self.state["V_RV"] += dt * (Q_TV - Q_PV)
-        self.state["p_AR_SYS"] += dt * (Q_AV - Q_AR_SYS) / C_AR_SYS
-        self.state["p_VEN_SYS"] += dt * (Q_AR_SYS - Q_VEN_SYS + I_ext) / C_VEN_SYS
-        self.state["p_AR_PUL"] += dt * (Q_PV - Q_AR_PUL) / C_AR_PUL
-        self.state["p_VEN_PUL"] += dt * (Q_AR_PUL - Q_VEN_PUL) / C_VEN_PUL
-        self.state["Q_AR_SYS"] += -dt * ((R_AR_SYS * Q_AR_SYS + p_VEN_SYS - p_AR_SYS) / L_AR_SYS)
-        self.state["Q_VEN_SYS"] += -dt * ((R_VEN_SYS * Q_VEN_SYS + p_RA - p_VEN_SYS) / L_VEN_SYS)
-        self.state["Q_AR_PUL"] += -dt * (R_AR_PUL * Q_AR_PUL + p_VEN_PUL - p_AR_PUL) / L_AR_PUL
-        self.state["Q_VEN_PUL"] += -dt * (R_VEN_PUL * Q_VEN_PUL + p_LA - p_VEN_PUL) / L_VEN_PUL
+        self.dy[0] = Q_VEN_PUL - Q_MV
+        self.dy[1] = Q_MV - Q_AV
+        self.dy[2] = Q_VEN_SYS - Q_TV
+        self.dy[3] = Q_TV - Q_PV
+        self.dy[4] = (Q_AV - Q_AR_SYS) / C_AR_SYS
+        self.dy[5] = (Q_AR_SYS - Q_VEN_SYS + I_ext) / C_VEN_SYS
+        self.dy[6] = (Q_PV - Q_AR_PUL) / C_AR_PUL
+        self.dy[7] = (Q_AR_PUL - Q_VEN_PUL) / C_VEN_PUL
+        self.dy[8] = -((R_AR_SYS * Q_AR_SYS + p_VEN_SYS - p_AR_SYS) / L_AR_SYS)
+        self.dy[9] = -((R_VEN_SYS * Q_VEN_SYS + p_RA - p_VEN_SYS) / L_VEN_SYS)
+        self.dy[10] = -(R_AR_PUL * Q_AR_PUL + p_VEN_PUL - p_AR_PUL) / L_AR_PUL
+        self.dy[11] = -(R_VEN_PUL * Q_VEN_PUL + p_LA - p_VEN_PUL) / L_VEN_PUL
+        return self.dy
+
+    def step(self, t, dt):
+        dy = self.rhs(t, self.state)
+        self.state += dt * dy
 
     @property
     def volumes(self):
@@ -258,14 +297,14 @@ class Regazzoni2020(base.CirculationModel):
         C_AR_PUL = self.parameters["circulation"]["PUL"]["C_AR"]
 
         volumes = {
-            "V_LA": self.state["V_LA"],
-            "V_LV": self.state["V_LV"],
-            "V_RA": self.state["V_RA"],
-            "V_RV": self.state["V_RV"],
-            "V_AR_SYS": C_AR_SYS * self.state["p_AR_SYS"],
-            "V_VEN_SYS": C_VEN_SYS * self.state["p_VEN_SYS"],
-            "V_AR_PUL": C_AR_PUL * self.state["p_AR_PUL"],
-            "V_VEN_PUL": C_VEN_PUL * self.state["p_VEN_PUL"],
+            "V_LA": self.state[0],
+            "V_LV": self.state[1],
+            "V_RA": self.state[2],
+            "V_RV": self.state[3],
+            "V_AR_SYS": C_AR_SYS * self.state[4],
+            "V_VEN_SYS": C_VEN_SYS * self.state[5],
+            "V_AR_PUL": C_AR_PUL * self.state[6],
+            "V_VEN_PUL": C_VEN_PUL * self.state[7],
         }
 
         volumes["Heart"] = volumes["V_LA"] + volumes["V_LV"] + volumes["V_RA"] + volumes["V_RV"]
@@ -278,25 +317,25 @@ class Regazzoni2020(base.CirculationModel):
     @property
     def pressures(self) -> dict[str, float]:
         return {
-            "p_LA": self.var["p_LA"],
-            "p_LV": self.var["p_LV"],
-            "p_RA": self.var["p_RA"],
-            "p_RV": self.var["p_RV"],
-            "p_AR_SYS": self.state["p_AR_SYS"],
-            "p_VEN_SYS": self.state["p_VEN_SYS"],
-            "p_AR_PUL": self.state["p_AR_PUL"],
-            "p_VEN_PUL": self.state["p_VEN_PUL"],
+            "p_LA": self.var[0],
+            "p_LV": self.var[1],
+            "p_RA": self.var[2],
+            "p_RV": self.var[3],
+            "p_AR_SYS": self.state[4],
+            "p_VEN_SYS": self.state[5],
+            "p_AR_PUL": self.state[6],
+            "p_VEN_PUL": self.state[7],
         }
 
     @property
     def flows(self) -> dict[str, float]:
         return {
-            "Q_MV": self.var["Q_MV"],
-            "Q_AV": self.var["Q_AV"],
-            "Q_TV": self.var["Q_TV"],
-            "Q_PV": self.var["Q_PV"],
-            "Q_AR_SYS": self.state["Q_AR_SYS"],
-            "Q_VEN_SYS": self.state["Q_VEN_SYS"],
-            "Q_AR_PUL": self.state["Q_AR_PUL"],
-            "Q_VEN_PUL": self.state["Q_VEN_PUL"],
+            "Q_MV": self.var[4],
+            "Q_AV": self.var[5],
+            "Q_TV": self.var[6],
+            "Q_PV": self.var[7],
+            "Q_AR_SYS": self.state[8],
+            "Q_VEN_SYS": self.state[9],
+            "Q_AR_PUL": self.state[10],
+            "Q_VEN_PUL": self.state[11],
         }
