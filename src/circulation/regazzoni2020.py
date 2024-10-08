@@ -20,6 +20,35 @@ class Regazzoni2020(base.CirculationModel):
         closed-loop blood circulation. Part I: model derivation", arXiv (2020)
         https://arxiv.org/abs/2011.15040
 
+    Parameters
+    ----------
+    parameters : dict[str, Any] | None, optional
+        Parameters used in the model, by default None which uses the default parameters
+    p_LV_func : Callable[[float, float], float] | None, optional
+        Optional function to calculate the pressure in the LV, by default None.
+        The function should take the volume in the LV as the first argument and
+        the time as the second argument, and return the pressure in the LV
+    p_BiV_func : Callable[[float, float, float], float] | None, optional
+        Optional function to calculate the pressure in the LV and RV, by default None.
+        The function should take the volume in the LV as the first argument, the volume
+        in the RV as the second argument, and the time as the third argument, and return
+        a tuple (plv, prv) with the pressures in the LV and RV.
+    add_units : bool, optional
+        Add units to the parameters, by default False. Note that adding units
+        will drastically slow down the simulation, so it is recommended to
+        use this only for testing purposes.
+    callback : base.CallBack | None, optional
+        Optional callback function, by default None. The callback function takes
+        three arguments: the model, the current time, and a boolean flag `save`
+        which indicates if the current state should be saved.
+    verbose : bool, optional
+        Print additional information, by default False
+    comm : mpi4py.MPI_InterComm optional
+        MPI communicator, by default None
+    outdir : Path, optional
+        Output directory, by default Path("results-regazzoni")
+    initial_state : dict[str, float] | None, optional
+        Initial state of the model, by default None which uses the default initial state
     """
 
     def __init__(
