@@ -26,6 +26,7 @@ class Regazzoni2020(base.CirculationModel):
         self,
         parameters: dict[str, Any] | None = None,
         p_LV_func: Callable[[float, float], float] | None = None,
+        p_BiV_func: Callable[[float, float, float], float] | None = None,
         add_units=False,
         callback: base.CallBack | None = None,
         verbose: bool = False,
@@ -68,18 +69,24 @@ class Regazzoni2020(base.CirculationModel):
         E_LA = self.time_varying_elastance(**chambers["LA"])
         self.p_LA_func = lambda V, t: E_LA(t) * (V - chambers["LA"]["V0"])
 
-        if p_LV_func is not None:
-            self.p_LV_func = p_LV_func
+        self.p_BiV_func = p_BiV_func
+        if p_BiV_func is not None:
+            # We should use the p_BiV_func tp calculate the pressure in the LV and RV
+            self.p_LV_func = None
+            self.p_RV_func = None
         else:
-            # Use default time varying elastance model
-            E_LV = self.time_varying_elastance(**chambers["LV"])
-            self.p_LV_func = lambda V, t: E_LV(t) * (V - chambers["LV"]["V0"])
+            E_RV = self.time_varying_elastance(**chambers["RV"])
+            self.p_RV_func = lambda V, t: E_RV(t) * (V - chambers["RV"]["V0"])
+
+            if p_LV_func is not None:
+                self.p_LV_func = p_LV_func
+            else:
+                # Use default time varying elastance model
+                E_LV = self.time_varying_elastance(**chambers["LV"])
+                self.p_LV_func = lambda V, t: E_LV(t) * (V - chambers["LV"]["V0"])
 
         E_RA = self.time_varying_elastance(**chambers["RA"])
         self.p_RA_func = lambda V, t: E_RA(t) * (V - chambers["RA"]["V0"])
-
-        E_RV = self.time_varying_elastance(**chambers["RV"])
-        self.p_RV_func = lambda V, t: E_RV(t) * (V - chambers["RV"]["V0"])
 
         self._initialize()
 
@@ -189,10 +196,18 @@ class Regazzoni2020(base.CirculationModel):
         }
 
     def update_static_variables(self, t):
+        if self.p_BiV_func is not None:
+            p_LV, p_RV = self.p_BiV_func(self.state["V_LV"], self.state["V_RV"], t)
+            self.var["p_LV"] = p_LV
+            self.var["p_RV"] = p_RV
+        else:
+            assert self.p_LV_func is not None
+            self.var["p_LV"] = self.p_LV_func(self.state["V_LV"], t)
+            assert self.p_RV_func is not None
+            self.var["p_RV"] = self.p_RV_func(self.state["V_RV"], t)
+
         self.var["p_LA"] = self.p_LA_func(self.state["V_LA"], t)
-        self.var["p_LV"] = self.p_LV_func(self.state["V_LV"], t)
         self.var["p_RA"] = self.p_RA_func(self.state["V_RA"], t)
-        self.var["p_RV"] = self.p_RV_func(self.state["V_RV"], t)
         self.var["Q_MV"] = self.flux_through_valve(self.var["p_LA"], self.var["p_LV"], self.R_MV)
         self.var["Q_AV"] = self.flux_through_valve(
             self.var["p_LV"], self.state["p_AR_SYS"], self.R_AV
