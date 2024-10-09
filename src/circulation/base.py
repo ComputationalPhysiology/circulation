@@ -77,6 +77,32 @@ def deep_update(d, u):
 
 
 class CirculationModel(ABC):
+    """Base class for circulation models
+
+    Parameters
+    ----------
+    parameters : dict[str, Any] | None, optional
+        Parameters used in the model, by default None which uses the default parameters
+    add_units : bool, optional
+        Add units to the parameters, by default False. Note that adding units
+        will drastically slow down the simulation, so it is recommended to
+        use this only for testing purposes.
+    callback : base.CallBack | None, optional
+        Optional callback function which is called at every time step, by default None.
+        The callback function take three arguments: the model, the current time,
+        and a boolean flag `save` which indicates if the current state should be saved.
+    verbose : bool, optional
+        Print additional information, by default False
+    comm : mpi4py.MPI_InterComm optional
+        MPI communicator, by default None
+    callback_save_state : base.CallBack | None, optional
+        Optional callback function called every time the state should be saved, by default None.
+        The function should take three arguments: the model, the current time, and a boolean
+        flag `save` which indicates if the current state should be saved.
+    initial_state : dict[str, float] | None, optional
+        Initial state of the model, by default None which uses the default initial state
+    """
+
     def __init__(
         self,
         parameters: dict[str, Any] | None = None,

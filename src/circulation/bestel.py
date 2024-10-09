@@ -37,12 +37,12 @@ class BestelActivation:
     Notes
     -----
     The active stress is taken from Bestel et al. [3]_, characterized through
-    a time-dependent stress function \tau solution to the evolution equation
+    a time-dependent stress function :math:`\tau` solution to the evolution equation
 
     .. math::
         \dot{\tau}(t) = -|a(t)|\tau(t) + \sigma_0|a(t)|_+
 
-    being a(\cdot) the activation function and \sigma_0 contractility,
+    with :math:`a(\cdot)` being the activation function and \sigma_0 contractility,
     where each remaining term is described below:
 
     .. math::
@@ -145,7 +145,7 @@ class BestelPressure:
         \dot{p}(t) = -|b(t)|p(t) + \sigma_{\mathrm{mid}}|b(t)|_+
         + \sigma_{\mathrm{pre}}|g_{\mathrm{pre}}(t)|
 
-    being b(\cdot) the activation function described below:
+    with :math:`b(\cdot)` being the activation function described below:
 
     .. math::
         b(t) =& a_{\mathrm{pre}}(t) + \alpha_{\mathrm{pre}}g_{\mathrm{pre}}(t)
