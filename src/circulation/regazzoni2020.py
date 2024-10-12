@@ -296,27 +296,30 @@ class Regazzoni2020(base.CirculationModel):
 
     @property
     def volumes(self):
-        C_VEN_SYS = self.parameters["circulation"]["SYS"]["C_VEN"]
-        C_AR_SYS = self.parameters["circulation"]["SYS"]["C_AR"]
-        C_VEN_PUL = self.parameters["circulation"]["PUL"]["C_VEN"]
-        C_AR_PUL = self.parameters["circulation"]["PUL"]["C_AR"]
+        return type(self).compute_volumes(self.parameters, self.state)
+
+    @staticmethod
+    def compute_volumes(parameters, state):
+        C_VEN_SYS = parameters["circulation"]["SYS"]["C_VEN"]
+        C_AR_SYS = parameters["circulation"]["SYS"]["C_AR"]
+        C_VEN_PUL = parameters["circulation"]["PUL"]["C_VEN"]
+        C_AR_PUL = parameters["circulation"]["PUL"]["C_AR"]
 
         volumes = {
-            "V_LA": self.state["V_LA"],
-            "V_LV": self.state["V_LV"],
-            "V_RA": self.state["V_RA"],
-            "V_RV": self.state["V_RV"],
-            "V_AR_SYS": C_AR_SYS * self.state["p_AR_SYS"],
-            "V_VEN_SYS": C_VEN_SYS * self.state["p_VEN_SYS"],
-            "V_AR_PUL": C_AR_PUL * self.state["p_AR_PUL"],
-            "V_VEN_PUL": C_VEN_PUL * self.state["p_VEN_PUL"],
+            "V_LA": state["V_LA"],
+            "V_LV": state["V_LV"],
+            "V_RA": state["V_RA"],
+            "V_RV": state["V_RV"],
+            "V_AR_SYS": C_AR_SYS * state["p_AR_SYS"],
+            "V_VEN_SYS": C_VEN_SYS * state["p_VEN_SYS"],
+            "V_AR_PUL": C_AR_PUL * state["p_AR_PUL"],
+            "V_VEN_PUL": C_VEN_PUL * state["p_VEN_PUL"],
         }
 
         volumes["Heart"] = volumes["V_LA"] + volumes["V_LV"] + volumes["V_RA"] + volumes["V_RV"]
         volumes["SYS"] = volumes["V_AR_SYS"] + volumes["V_VEN_SYS"]
         volumes["PUL"] = volumes["V_AR_PUL"] + volumes["V_VEN_PUL"]
         volumes["Total"] = volumes["Heart"] + volumes["SYS"] + volumes["PUL"]
-
         return volumes
 
     @property

@@ -199,7 +199,7 @@ class CirculationModel(ABC):
             tC=tC,
             TC=TC,
             TR=TR,
-            HR=self.HR,
+            RR=1 / self.HR,
         )
 
     def flux_through_valve(self, p1: float, p2: float, R: Callable[[float, float], float]) -> float:
@@ -233,7 +233,7 @@ class CirculationModel(ABC):
         logger.info("Running circulation model")
         if T is None:
             assert num_cycles is not None, "Please provide num_cycles or T"
-            T = self.HR * num_cycles
+            T = num_cycles / self.HR
 
         initial_state = initial_state or dict()
 
@@ -257,16 +257,14 @@ class CirculationModel(ABC):
         else:
             self.state = remove_units(self.state)
 
-        self.store(t)
-
         time_start = time.time()
-
         i = 0
         while t < T:
-            self.callback(self, t, i % output_every_n_steps == 0)
-            self.step(t, dt)
             if i % output_every_n_steps == 0:
                 self.store(t)
+            self.callback(self, t, i % output_every_n_steps == 0)
+
+            self.step(t, dt)
             if self._verbose:
                 self.print_info()
 
@@ -274,7 +272,6 @@ class CirculationModel(ABC):
                 self.save_state()
             t += dt
             i += 1
-
         duration = time.time() - time_start
 
         logger.info(f"Done running circulation model in {duration:.2f} s")

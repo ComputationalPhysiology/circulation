@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 setup_logging()
 
 
+
 # Run first Zenker to get the correct heart rate for normal conditions
 zenker_normal = Zenker()
 zenker_normal.solve(T=100.0, dt=1e-3, dt_eval=0.1)
@@ -23,7 +24,7 @@ print(f"HR_normal = {HR_normal}, R_TPR_normal = {R_TPR_normal}, C_PRSW_normal = 
 
 
 # Now we will simulate a bleeding and compute a new heart rate
-blood_loss_parameters = {"start_withdrawal": 1, "end_withdrawal": 2, "flow_withdrawal": -2000, "flow_infusion": 0}
+blood_loss_parameters = {"start_withdrawal": 1, "end_withdrawal": 200, "flow_withdrawal": -100, "flow_infusion": 0}
 zenker_bleed = Zenker(parameters=blood_loss_parameters)
 zenker_bleed.solve(T=300.0, dt=1e-3, dt_eval=0.1, initial_state=zenker_normal.state)
 HR_bleed = zenker_bleed.results["fHR"][-1]
@@ -57,7 +58,7 @@ for chamber in ["LA", "LV", "RA", "RV"]:
 regazzoni_bleed_parmeters["circulation"]["external"] = blood_loss_parameters
 
 regazzoni_bleed = Regazzoni2020(parameters=regazzoni_bleed_parmeters)
-regazzoni_bleed.solve(num_cycles=20, initial_state=regazzoni_normal.state, dt_eval=dt_eval)
+regazzoni_bleed.solve(num_cycles=50, initial_state=regazzoni_normal.state, dt_eval=dt_eval)
 regazzoni_bleed.print_info()
 N_bleed = int(regazzoni_bleed.HR / dt_eval)
 
@@ -75,18 +76,25 @@ print(f"SV_normal = {SV_normal}, SV_bleed = {SV_bleed}")
 
 
 fig, ax = plt.subplots(2, 2, sharex=True, sharey=True, figsize=(10, 5))
-ax[0, 0].plot(regazzoni_normal.results["V_LV"], regazzoni_normal.results["p_LV"])
-ax[0, 0].set_xlabel("V [mL]")
-ax[0, 0].set_ylabel("p [mmHg]")
 ax[0, 0].set_title("Normal")
-ax[1, 0].plot(regazzoni_normal.results["V_LV"][-N_normal:], regazzoni_normal.results["p_LV"][-N_normal:])
-ax[1, 0].set_xlabel("V [mL]")
-ax[0, 1].plot(regazzoni_bleed.results["V_LV"], regazzoni_bleed.results["p_LV"])
-ax[0, 1].set_xlabel("V [mL]")
-ax[0, 1].set_ylabel("p [mmHg]")
+ax[0, 0].plot(regazzoni_normal.results["V_LV"], regazzoni_normal.results["p_LV"], label="LV")
+ax[0, 0].plot(regazzoni_normal.results["V_RV"], regazzoni_normal.results["p_RV"], label="RV")
+ax[1, 0].plot(regazzoni_normal.results["V_LV"][-N_normal:], regazzoni_normal.results["p_LV"][-N_normal:], label="LV")
+ax[1, 0].plot(regazzoni_normal.results["V_RV"][-N_normal:], regazzoni_normal.results["p_RV"][-N_normal:], label="RV")
 ax[0, 1].set_title("Bleeding")
-ax[1, 1].plot(regazzoni_bleed.results["V_LV"][-N_bleed:], regazzoni_bleed.results["p_LV"][-N_bleed:])
+ax[0, 1].plot(regazzoni_bleed.results["V_LV"], regazzoni_bleed.results["p_LV"], label="LV")
+ax[0, 1].plot(regazzoni_bleed.results["V_RV"], regazzoni_bleed.results["p_RV"], label="RV")
+ax[1, 1].plot(regazzoni_bleed.results["V_LV"][-N_bleed:], regazzoni_bleed.results["p_LV"][-N_bleed:], label="LV")
+ax[1, 1].plot(regazzoni_bleed.results["V_RV"][-N_bleed:], regazzoni_bleed.results["p_RV"][-N_bleed:], label="RV")
+
+ax[0, 0].set_ylabel("p [mmHg]")
+ax[1, 0].set_ylabel("p [mmHg]")
+ax[1, 0].set_xlabel("V [mL]")
 ax[1, 1].set_xlabel("V [mL]")
+
+for axi in ax.flatten():
+    axi.grid()
+    axi.legend()
 plt.show()
 
 
