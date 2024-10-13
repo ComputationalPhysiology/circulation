@@ -24,7 +24,7 @@ print(f"HR_normal = {HR_normal}, R_TPR_normal = {R_TPR_normal}, C_PRSW_normal = 
 
 
 # Now we will simulate a bleeding and compute a new heart rate
-blood_loss_parameters = {"start_withdrawal": 1, "end_withdrawal": 200, "flow_withdrawal": -100, "flow_infusion": 0}
+blood_loss_parameters = {"start_withdrawal": 1, "end_withdrawal": 2, "flow_withdrawal": -2000, "flow_infusion": 0}
 zenker_bleed = Zenker(parameters=blood_loss_parameters)
 zenker_bleed.solve(T=300.0, dt=1e-3, dt_eval=0.1, initial_state=zenker_normal.state)
 HR_bleed = zenker_bleed.results["fHR"][-1]
@@ -38,7 +38,7 @@ R_TPR_factor = R_TPR_bleed / R_TPR_normal
 C_PRSW_factor = C_PRSW_bleed / C_PRSW_normal
 
 regazzoni_normal_parmeters = Regazzoni2020.default_parameters()
-regazzoni_normal_parmeters["HR"] = HR_normal
+regazzoni_normal_parmeters["HR"] = 1.0
 regazzoni_normal = Regazzoni2020(parameters=regazzoni_normal_parmeters)
 regazzoni_normal.print_info()
 
@@ -48,7 +48,7 @@ regazzoni_normal.solve(num_cycles=20, dt_eval=dt_eval)
 N_normal = int(regazzoni_normal.HR / dt_eval)
 
 regazzoni_bleed_parmeters = Regazzoni2020.default_parameters()
-regazzoni_bleed_parmeters["HR"] = HR_bleed
+regazzoni_bleed_parmeters["HR"] = HR_factor
 regazzoni_bleed_parmeters["circulation"]["SYS"]["R_AR"] *= R_TPR_factor
 regazzoni_bleed_parmeters["circulation"]["SYS"]["R_VEN"] *= R_TPR_factor
 for chamber in ["LA", "LV", "RA", "RV"]:
@@ -58,7 +58,7 @@ for chamber in ["LA", "LV", "RA", "RV"]:
 regazzoni_bleed_parmeters["circulation"]["external"] = blood_loss_parameters
 
 regazzoni_bleed = Regazzoni2020(parameters=regazzoni_bleed_parmeters)
-regazzoni_bleed.solve(num_cycles=50, initial_state=regazzoni_normal.state, dt_eval=dt_eval)
+regazzoni_bleed.solve(num_cycles=100, initial_state=regazzoni_normal.state, dt_eval=dt_eval)
 regazzoni_bleed.print_info()
 N_bleed = int(regazzoni_bleed.HR / dt_eval)
 
@@ -72,7 +72,6 @@ V_LV_ES = min(V_LV_bleed)
 SV_bleed = V_LV_ED - V_LV_ES
 
 print(f"SV_normal = {SV_normal}, SV_bleed = {SV_bleed}")
-
 
 
 fig, ax = plt.subplots(2, 2, sharex=True, sharey=True, figsize=(10, 5))
@@ -95,6 +94,30 @@ ax[1, 1].set_xlabel("V [mL]")
 for axi in ax.flatten():
     axi.grid()
     axi.legend()
+
+pressure_keys = ['p_AR_SYS', 'p_VEN_SYS', 'p_AR_PUL', 'p_VEN_PUL', 'p_LV', 'p_RV', 'p_LA', 'p_RA']
+flow_keys = ["Q_MV","Q_AV", "Q_TV", "Q_PV" ,"I_ext", "Q_AR_SYS", "Q_VEN_SYS" ,  "Q_AR_PUL",  "Q_VEN_PUL"]
+for case, obj in [("normal",regazzoni_normal), ("bleed", regazzoni_bleed)]:
+    fig, ax = plt.subplots(3, 3, sharex=True, figsize=(10, 8))
+    for axi, key in zip(ax.flatten(), flow_keys):
+        axi.plot(obj.results["time"], obj.results[key])
+        axi.set_title(key)
+    fig.suptitle(f"Flow {case}")
+
+    fig, ax = plt.subplots(4, 2, sharex=True, figsize=(10, 8))
+    for axi, key in zip(ax.flatten(), pressure_keys):
+        axi.plot(obj.results["time"], obj.results[key])
+        axi.set_title(key)
+    fig.suptitle(f"Pressure {case}")
+
+    volumes = Regazzoni2020.compute_volumes(obj.parameters, obj.results)
+
+    fig, ax = plt.subplots(4, 3, sharex=True, figsize=(10, 8))
+    for axi, (key, v) in zip(ax.flatten(), volumes.items()):
+        axi.plot(obj.results["time"], v)
+        axi.set_title(key)
+    fig.suptitle(f"Volumes {case}")
+
 plt.show()
 
 
