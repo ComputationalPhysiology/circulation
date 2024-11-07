@@ -25,6 +25,7 @@ jobs:
         python-version: ${{ matrix.python-version }}
     - name: Install circulation
       run: |
+        python3 -m pip install git+https://github.com/hgrecco/pint.git
         python -m pip install -e ".[test]"
     - name: Test with pytest
       run: |
