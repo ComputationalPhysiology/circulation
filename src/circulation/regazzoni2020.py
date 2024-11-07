@@ -3,12 +3,22 @@ from __future__ import annotations
 from typing import Callable, Any
 from pathlib import Path
 
+import numpy as np
+
 from . import base
 from . import units
 
 mL = units.ureg("mL")
 mmHg = units.ureg("mmHg")
 s = units.ureg("s")
+
+
+def list2array(lst):
+    if hasattr(lst, "__len__"):
+        # Turn the object into a numpy array
+        return np.array(lst)
+    else:
+        return lst
 
 
 class Regazzoni2020(base.CirculationModel):
@@ -306,14 +316,14 @@ class Regazzoni2020(base.CirculationModel):
         C_AR_PUL = parameters["circulation"]["PUL"]["C_AR"]
 
         volumes = {
-            "V_LA": state["V_LA"],
-            "V_LV": state["V_LV"],
-            "V_RA": state["V_RA"],
-            "V_RV": state["V_RV"],
-            "V_AR_SYS": C_AR_SYS * state["p_AR_SYS"],
-            "V_VEN_SYS": C_VEN_SYS * state["p_VEN_SYS"],
-            "V_AR_PUL": C_AR_PUL * state["p_AR_PUL"],
-            "V_VEN_PUL": C_VEN_PUL * state["p_VEN_PUL"],
+            "V_LA": list2array(state["V_LA"]),
+            "V_LV": list2array(state["V_LV"]),
+            "V_RA": list2array(state["V_RA"]),
+            "V_RV": list2array(state["V_RV"]),
+            "V_AR_SYS": C_AR_SYS * list2array(state["p_AR_SYS"]),
+            "V_VEN_SYS": C_VEN_SYS * list2array(state["p_VEN_SYS"]),
+            "V_AR_PUL": C_AR_PUL * list2array(state["p_AR_PUL"]),
+            "V_VEN_PUL": C_VEN_PUL * list2array(state["p_VEN_PUL"]),
         }
 
         volumes["Heart"] = volumes["V_LA"] + volumes["V_LV"] + volumes["V_RA"] + volumes["V_RV"]
