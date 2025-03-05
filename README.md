@@ -22,15 +22,15 @@ import circulation
 # Create a model
 model = circulation.regazzoni2020.Regazzoni2020()
 
-# Solve the model
-results = model.solve(T=1.0, dt=1e-3, dt_eval=0.1)
+# Solve the model for 5 seconds with a  time step of 1 ms and an evaluation time step of 10 ms
+results = model.solve(T=5.0, dt=1e-3, dt_eval=0.01)
 
 # Print some information about the pressure, flows and volumes inside the model
-circulation.print_info()
+model.print_info()
 
 # Plot the pressure-volume loop
 fig, ax = plt.subplots()
-ax.plot(history["V_LV"], history["p_LV"])
+ax.plot(results["V_LV"], results["p_LV"])
 ax.set_xlabel("V [mL]")
 ax.set_ylabel("p [mmHg]")
 plt.show()

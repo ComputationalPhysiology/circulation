@@ -3,12 +3,22 @@ from __future__ import annotations
 from typing import Callable, Any
 from pathlib import Path
 
+import numpy as np
+
 from . import base
 from . import units
 
 mL = units.ureg("mL")
 mmHg = units.ureg("mmHg")
 s = units.ureg("s")
+
+
+def list2array(lst):
+    if hasattr(lst, "__len__"):
+        # Turn the object into a numpy array
+        return np.array(lst)
+    else:
+        return lst
 
 
 class Regazzoni2020(base.CirculationModel):
@@ -20,6 +30,35 @@ class Regazzoni2020(base.CirculationModel):
         closed-loop blood circulation. Part I: model derivation", arXiv (2020)
         https://arxiv.org/abs/2011.15040
 
+    Parameters
+    ----------
+    parameters : dict[str, Any] | None, optional
+        Parameters used in the model, by default None which uses the default parameters
+    p_LV_func : Callable[[float, float], float] | None, optional
+        Optional function to calculate the pressure in the LV, by default None.
+        The function should take the volume in the LV as the first argument and
+        the time as the second argument, and return the pressure in the LV
+    p_BiV_func : Callable[[float, float, float], float] | None, optional
+        Optional function to calculate the pressure in the LV and RV, by default None.
+        The function should take the volume in the LV as the first argument, the volume
+        in the RV as the second argument, and the time as the third argument, and return
+        a tuple (plv, prv) with the pressures in the LV and RV.
+    add_units : bool, optional
+        Add units to the parameters, by default False. Note that adding units
+        will drastically slow down the simulation, so it is recommended to
+        use this only for testing purposes.
+    callback : base.CallBack | None, optional
+        Optional callback function, by default None. The callback function takes
+        three arguments: the model, the current time, and a boolean flag `save`
+        which indicates if the current state should be saved.
+    verbose : bool, optional
+        Print additional information, by default False
+    comm : mpi4py.MPI_InterComm optional
+        MPI communicator, by default None
+    outdir : Path, optional
+        Output directory, by default Path("results-regazzoni")
+    initial_state : dict[str, float] | None, optional
+        Initial state of the model, by default None which uses the default initial state
     """
 
     def __init__(
@@ -212,13 +251,13 @@ class Regazzoni2020(base.CirculationModel):
         V_RA = y[2]
         V_RV = y[3]
         p_AR_SYS = y[4]
-        p_VEN_SYS = y[5]
+        # p_VEN_SYS = y[5]
         p_AR_PUL = y[6]
-        p_VEN_PUL = y[7]
-        Q_AR_SYS = y[8]
-        Q_VEN_SYS = y[9]
-        Q_AR_PUL = y[10]
-        Q_VEN_PUL = y[11]
+        # p_VEN_PUL = y[7]
+        # Q_AR_SYS = y[8]
+        # Q_VEN_SYS = y[9]
+        # Q_AR_PUL = y[10]
+        # Q_VEN_PUL = y[11]
 
         self.var[0] = self.p_LA(V_LA, t)
         self.var[1] = self.p_LV(V_LV, t)
@@ -232,10 +271,10 @@ class Regazzoni2020(base.CirculationModel):
         return self.var
 
     def rhs(self, t, y, var=None):
-        V_LA = y[0]
-        V_LV = y[1]
-        V_RA = y[2]
-        V_RV = y[3]
+        # V_LA = y[0]
+        # V_LV = y[1]
+        # V_RA = y[2]
+        # V_RV = y[3]
         p_AR_SYS = y[4]
         p_VEN_SYS = y[5]
         p_AR_PUL = y[6]
@@ -249,9 +288,9 @@ class Regazzoni2020(base.CirculationModel):
             var = self.update_static_variables(t, y)
 
         p_LA = var[0]
-        p_LV = var[1]
+        # p_LV = var[1]
         p_RA = var[2]
-        p_RV = var[3]
+        # p_RV = var[3]
         Q_MV = var[4]
         Q_AV = var[5]
         Q_TV = var[6]
@@ -291,27 +330,30 @@ class Regazzoni2020(base.CirculationModel):
 
     @property
     def volumes(self):
-        C_VEN_SYS = self.parameters["circulation"]["SYS"]["C_VEN"]
-        C_AR_SYS = self.parameters["circulation"]["SYS"]["C_AR"]
-        C_VEN_PUL = self.parameters["circulation"]["PUL"]["C_VEN"]
-        C_AR_PUL = self.parameters["circulation"]["PUL"]["C_AR"]
+        return type(self).compute_volumes(self.parameters, self.state)
+
+    @staticmethod
+    def compute_volumes(parameters, state):
+        C_VEN_SYS = parameters["circulation"]["SYS"]["C_VEN"]
+        C_AR_SYS = parameters["circulation"]["SYS"]["C_AR"]
+        C_VEN_PUL = parameters["circulation"]["PUL"]["C_VEN"]
+        C_AR_PUL = parameters["circulation"]["PUL"]["C_AR"]
 
         volumes = {
-            "V_LA": self.state[0],
-            "V_LV": self.state[1],
-            "V_RA": self.state[2],
-            "V_RV": self.state[3],
-            "V_AR_SYS": C_AR_SYS * self.state[4],
-            "V_VEN_SYS": C_VEN_SYS * self.state[5],
-            "V_AR_PUL": C_AR_PUL * self.state[6],
-            "V_VEN_PUL": C_VEN_PUL * self.state[7],
+            "V_LA": state[0],
+            "V_LV": state[1],
+            "V_RA": state[2],
+            "V_RV": state[3],
+            "V_AR_SYS": C_AR_SYS * state[4],
+            "V_VEN_SYS": C_VEN_SYS * state[5],
+            "V_AR_PUL": C_AR_PUL * state[6],
+            "V_VEN_PUL": C_VEN_PUL * state[7],
         }
 
         volumes["Heart"] = volumes["V_LA"] + volumes["V_LV"] + volumes["V_RA"] + volumes["V_RV"]
         volumes["SYS"] = volumes["V_AR_SYS"] + volumes["V_VEN_SYS"]
         volumes["PUL"] = volumes["V_AR_PUL"] + volumes["V_VEN_PUL"]
         volumes["Total"] = volumes["Heart"] + volumes["SYS"] + volumes["PUL"]
-
         return volumes
 
     @property
