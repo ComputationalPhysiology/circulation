@@ -117,6 +117,7 @@ class Zenker(base.CirculationModel):
         self.var["R_TPR"] = R_TPR
         self.var["C_PRSW"] = C_PRSW
         self.var["Vv0"] = Vv0
+        self.var["TotalVolume"] = Va + Vv  # + Vv0 + Va0
 
         self.var["Pa"] = Pa  # Eq 17
         self.var["Pcvp"] = Pcvp  # Eq 17
