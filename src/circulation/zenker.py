@@ -41,11 +41,10 @@ class Zenker(base.CirculationModel):
             "R_TPR_max": 2.134 * mmHg * s / mL,
             "T_sys": 4 / 15 * s,
             "f_HR_min": 2 / 3 * 1 / s,
-            "f_HR_max": 3.0 * 1 / s,
+            "f_HR_max": 3 * 1 / s,
             "R_valve": 0.0025 * mmHg * s / mL,
             "C_PRSW_min": 25.9 * mmHg,
             "C_PRSW_max": 103.8 * mmHg,
-            "BPM": 75.0 * units.ureg("1/minutes"),
             "start_withdrawal": 0.0 * s,
             "end_withdrawal": 0.0 * s,
             "start_infusion": 0.0 * s,
@@ -118,6 +117,7 @@ class Zenker(base.CirculationModel):
         self.var["R_TPR"] = R_TPR
         self.var["C_PRSW"] = C_PRSW
         self.var["Vv0"] = Vv0
+        self.var["TotalVolume"] = Va + Vv  # + Vv0 + Va0
 
         self.var["Pa"] = Pa  # Eq 17
         self.var["Pcvp"] = Pcvp  # Eq 17
@@ -165,8 +165,6 @@ class Zenker(base.CirculationModel):
         k2 = kE_LV
         # REMOVE MINUS SIGN
         k3 = (Pcvp + P0_LV) / R_Valve
-
-        # breakpoint()
 
         return -(1 / k2) * np.log(
             (k1 / k3) * (np.exp(-k2 * k3 * t) - 1) + np.exp(-k2 * (V_ES + k3 * t))

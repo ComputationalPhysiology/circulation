@@ -17,6 +17,8 @@ circulation = Zenker(
         "end_infusion": 500,
         "flow_withdrawal": -1,
         "flow_infusion": 1,
+        "Vv0_min": 1000,
+        "Vv0_max": 2000,
     }
 )
 history = circulation.solve(T=700.0, dt=1e-3, dt_eval=0.1)
@@ -48,7 +50,8 @@ ax[4, 1].plot(time, history["Pcvp"][start_plot:])
 ax[4, 1].set_ylabel("Pcvp [mmHg]")
 ax[4, 0].set_xlabel("Time [s]")
 ax[4, 1].set_xlabel("Time [s]")
-plt.show()
+# plt.show()
+fig.savefig("zenker.png")
 
 
 # # References
