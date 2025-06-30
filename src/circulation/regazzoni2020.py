@@ -242,10 +242,26 @@ class Regazzoni2020(base.CirculationModel):
             "Q_AV",
             "Q_TV",
             "Q_PV",
-            "I_ext",
         ]
 
-    def update_static_variables(self, t: float, y: list[float]):
+    @staticmethod
+    def state_names():
+        return [
+            "V_LA",
+            "V_LV",
+            "V_RA",
+            "V_RV",
+            "p_AR_SYS",
+            "p_VEN_SYS",
+            "p_AR_PUL",
+            "p_VEN_PUL",
+            "Q_AR_SYS",
+            "Q_VEN_SYS",
+            "Q_AR_PUL",
+            "Q_VEN_PUL",
+        ]
+
+    def update_static_variables(self, t, y):
         V_LA = y[0]
         V_LV = y[1]
         V_RA = y[2]
@@ -259,18 +275,24 @@ class Regazzoni2020(base.CirculationModel):
         # Q_AR_PUL = y[10]
         # Q_VEN_PUL = y[11]
 
-        self.var[0] = self.p_LA(V_LA, t)
-        self.var[1] = self.p_LV(V_LV, t)
-        self.var[2] = self.p_RA(V_RA, t)
-        self.var[3] = self.p_RV(V_RV, t)
-        self.var[4] = self.flux_through_valve(self.var[0], self.var[1], self.R_MV)
-        self.var[5] = self.flux_through_valve(self.var[1], p_AR_SYS, self.R_AV)
-        self.var[6] = self.flux_through_valve(self.var[2], self.var[3], self.R_TV)
-        self.var[7] = self.flux_through_valve(self.var[3], p_AR_PUL, self.R_PV)
-        self.var[8] = base.external_blood(**self.parameters["circulation"]["external"], t=t)
-        return self.var
+        try:
+            float(t)  # type: ignore[arg-type]
+        except TypeError:
+            var = np.zeros((len(self.var), len(t)), dtype=float)  # type: ignore[arg-type]
+        else:
+            var = self.var
+        var[0] = self.p_LA(V_LA, t)
+        var[1] = self.p_LV(V_LV, t)
+        var[2] = self.p_RA(V_RA, t)
+        var[3] = self.p_RV(V_RV, t)
+        var[4] = self.flux_through_valve(var[0], var[1], self.R_MV)
+        var[5] = self.flux_through_valve(var[1], p_AR_SYS, self.R_AV)
+        var[6] = self.flux_through_valve(var[2], var[3], self.R_TV)
+        var[7] = self.flux_through_valve(var[3], p_AR_PUL, self.R_PV)
+        # var[8] = base.external_blood(**self.parameters["circulation"]["external"], t=t)
+        return var
 
-    def rhs(self, t, y, var=None):
+    def rhs(self, t, y):
         # V_LA = y[0]
         # V_LV = y[1]
         # V_RA = y[2]
@@ -284,8 +306,7 @@ class Regazzoni2020(base.CirculationModel):
         Q_AR_PUL = y[10]
         Q_VEN_PUL = y[11]
 
-        if var is None:
-            var = self.update_static_variables(t, y)
+        var = self.update_static_variables(t, y)
 
         p_LA = var[0]
         # p_LV = var[1]

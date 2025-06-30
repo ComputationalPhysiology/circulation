@@ -17,13 +17,8 @@ from . import log
 logger = logging.getLogger(__name__)
 
 
-def smooth_heavyside(x, use_ufl=True):
-    if use_ufl:
-        import ufl
-
-        return ufl.atan(ufl.pi / 2 * x * 200) * 1 / ufl.pi + 0.5
-    else:
-        return np.arctan(np.pi / 2 * x * 200) * 1 / np.pi + 0.5
+def smooth_heavyside(x):
+    return np.arctan(np.pi / 2 * x * 200) * 1 / np.pi + 0.5
 
 
 def remove_units(parameters: dict[str, Any]) -> dict[str, Any]:
