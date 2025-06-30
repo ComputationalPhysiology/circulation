@@ -19,7 +19,7 @@ class Zenker(base.CirculationModel):
         https://doi.org/10.1371/journal.pcbi.0030204
     """
 
-    def __init__(self, parameters: dict[str, float] | None = None, **kwargs):
+    def __init__(self, parameters: dict[str, float | int] | None = None, **kwargs):
         super().__init__(parameters, **kwargs)
         self._initialize()
 

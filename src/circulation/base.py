@@ -285,6 +285,7 @@ class CirculationModel(ABC):
     ):
         if dt_eval is None:
             dt_eval = dt
+        output_every_n_steps = int(np.round(dt_eval / dt))
 
         if num_beats is None and T is None:
             raise ValueError("Need to specify either number of beats or total time")
@@ -292,19 +293,36 @@ class CirculationModel(ABC):
             num_beats = 1
             assert T is not None, "If num_beats is None, T must be specified"
             times_one_beat = np.arange(0, T, dt)
-            self.times_eval = np.arange(0, T + dt_eval, dt_eval)
+
         else:
             if T is not None:
                 logger.warning("Ignoring T, using num_beats instead")
             times_one_beat = self.times_n_beats(dt, n=1)
-            self.times_eval = self.times_n_beats(dt_eval, n=num_beats)
+            T = (times_one_beat[-1] + dt) * num_beats
 
+        N = (
+            sum(
+                1
+                for _ in range(num_beats)
+                for i in range(len(times_one_beat))
+                if i % output_every_n_steps == 0
+            )
+            + 1
+        )
+
+        self.times_eval = np.linspace(0, T, N)
         logger.info("Running circulation model")
-        initial_state = initial_state or dict()
 
-        output_every_n_steps = np.round(dt_eval / dt)
+        if initial_state is None:
+            initial_state = type(self).default_initial_conditions()
+        elif isinstance(initial_state, (list, np.ndarray, tuple)):
+            initial_state = dict(zip(self.states_names, initial_state))
+        else:
+            assert isinstance(
+                initial_state, dict
+            ), "initial_state must be a dict or convertible to one"
+
         self.initialize_results()
-
         if checkpoint > 0:
             checkoint_every_n_steps = np.round(checkpoint / dt)
         else:
@@ -331,7 +349,6 @@ class CirculationModel(ABC):
                     self.store()
                 if self._verbose:
                     self.print_info()
-
                 if i % checkoint_every_n_steps == 0:
                     self.save_state()
 
@@ -353,9 +370,19 @@ class CirculationModel(ABC):
         return history
 
     def store(self):
-        self.results_state[:, self._index] = self.state[:]
-        self.results_var[:, self._index] = self.var[:]
-        self._index += 1
+        try:
+            self.results_state[:, self._index] = self.state[:]
+        except IndexError:
+            logger.warning(
+                "IndexError when storing results, this is likely due that the "
+                "HR and times for evaluations are not divisible by dt_eval. "
+                "This will result in a loss of data. Please check your "
+                "parameters."
+            )
+        else:
+            self.results_var[:, self._index] = self.var[:]
+        finally:
+            self._index += 1
 
     def save_state(self):
         self.callback_save_state(self)
