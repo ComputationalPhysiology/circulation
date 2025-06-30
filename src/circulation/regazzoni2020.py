@@ -233,16 +233,7 @@ class Regazzoni2020(base.CirculationModel):
 
     @staticmethod
     def var_names() -> list[str]:
-        return [
-            "p_LA",
-            "p_LV",
-            "p_RA",
-            "p_RV",
-            "Q_MV",
-            "Q_AV",
-            "Q_TV",
-            "Q_PV",
-        ]
+        return ["p_LA", "p_LV", "p_RA", "p_RV", "Q_MV", "Q_AV", "Q_TV", "Q_PV", "I_ext"]
 
     @staticmethod
     def state_names():
@@ -275,12 +266,7 @@ class Regazzoni2020(base.CirculationModel):
         # Q_AR_PUL = y[10]
         # Q_VEN_PUL = y[11]
 
-        try:
-            float(t)  # type: ignore[arg-type]
-        except TypeError:
-            var = np.zeros((len(self.var), len(t)), dtype=float)  # type: ignore[arg-type]
-        else:
-            var = self.var
+        var = self._get_var(t)
         var[0] = self.p_LA(V_LA, t)
         var[1] = self.p_LV(V_LV, t)
         var[2] = self.p_RA(V_RA, t)
@@ -289,7 +275,7 @@ class Regazzoni2020(base.CirculationModel):
         var[5] = self.flux_through_valve(var[1], p_AR_SYS, self.R_AV)
         var[6] = self.flux_through_valve(var[2], var[3], self.R_TV)
         var[7] = self.flux_through_valve(var[3], p_AR_PUL, self.R_PV)
-        # var[8] = base.external_blood(**self.parameters["circulation"]["external"], t=t)
+        var[8] = base.external_blood(**self.parameters["circulation"]["external"], t=t)
         return var
 
     def rhs(self, t, y):
@@ -344,10 +330,6 @@ class Regazzoni2020(base.CirculationModel):
         self.dy[10] = -(R_AR_PUL * Q_AR_PUL + p_VEN_PUL - p_AR_PUL) / L_AR_PUL
         self.dy[11] = -(R_VEN_PUL * Q_VEN_PUL + p_LA - p_VEN_PUL) / L_VEN_PUL
         return self.dy
-
-    def step(self, t, dt):
-        dy = self.rhs(t, self.state)
-        self.state += dt * dy
 
     @property
     def volumes(self):

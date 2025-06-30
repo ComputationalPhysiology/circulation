@@ -5,6 +5,7 @@ from abc import ABC, abstractmethod
 import json
 
 import numpy as np
+import numpy.typing as npt
 import time
 import logging
 from rich.table import Table
@@ -43,12 +44,11 @@ def external_blood(
     flow_infusion: float,
     **kwargs,
 ) -> float:
-    if start_withdrawal <= t < end_withdrawal:
-        return flow_withdrawal
-    elif start_infusion <= t < end_infusion:
-        return flow_infusion
-    else:
-        return 0.0
+    return np.where(
+        np.logical_and(start_withdrawal <= t, t < end_withdrawal),
+        flow_withdrawal,
+        np.where(np.logical_and(start_infusion <= t, t < end_infusion), flow_infusion, 0.0),
+    )
 
 
 class CallBack(Protocol):
@@ -186,7 +186,7 @@ class CirculationModel(ABC):
         return []
 
     @abstractmethod
-    def rhs(self, t: float, y: np.ndarray) -> np.ndarray: ...
+    def rhs(self, t: float, y: npt.NDArray) -> npt.NDArray: ...
 
     @property
     def num_vars(self):
@@ -206,9 +206,8 @@ class CirculationModel(ABC):
                 json.dumps(remove_units(self._initial_state), indent=2)
             )
 
-    def initialize_results(self, num_beats: int, dt_eval: float):
-        self.times = np.arange(0, num_beats / self.HR + dt_eval, dt_eval)
-        N = len(self.times)
+    def initialize_results(self):
+        N = len(self.times_eval)
         self.results_state = np.zeros((self.num_states, N))
         self.results_state[:, 0] = self.state
 
@@ -259,28 +258,52 @@ class CirculationModel(ABC):
             * smooth_heavyside((v - w) / unit_p)
         )
 
-    def times_one_beat(self, dt: float) -> np.ndarray:
-        return np.arange(0, 1 / self.HR, dt)
+    def times_n_beats(self, dt: float, n: int = 1) -> np.ndarray:
+        return np.arange(0, n / self.HR, dt)
 
-    @abstractmethod
-    def step(self, t: float, dt: float) -> None: ...
+    def step(self, t, dt):
+        dy = self.rhs(t, self.state)
+        self.state += dt * dy
+
+    def _get_var(self, t):
+        try:
+            float(t)  # type: ignore[arg-type]
+        except TypeError:
+            var = np.zeros((len(self.var), len(t)), dtype=float)  # type: ignore[arg-type]
+        else:
+            var = self.var
+        return var
 
     def solve(
         self,
-        num_beats: int = 1,
+        num_beats: int | None = None,
+        T: float | None = None,
         initial_state: dict[str, float] | None = None,
         dt: float = 1e-3,
         dt_eval: float | None = None,
         checkpoint: int = 0,
     ):
-        logger.info("Running circulation model")
-        initial_state = initial_state or dict()
-
         if dt_eval is None:
             dt_eval = dt
 
+        if num_beats is None and T is None:
+            raise ValueError("Need to specify either number of beats or total time")
+        elif num_beats is None:
+            num_beats = 1
+            assert T is not None, "If num_beats is None, T must be specified"
+            times_one_beat = np.arange(0, T, dt)
+            self.times_eval = np.arange(0, T + dt_eval, dt_eval)
+        else:
+            if T is not None:
+                logger.warning("Ignoring T, using num_beats instead")
+            times_one_beat = self.times_n_beats(dt, n=1)
+            self.times_eval = self.times_n_beats(dt_eval, n=num_beats)
+
+        logger.info("Running circulation model")
+        initial_state = initial_state or dict()
+
         output_every_n_steps = np.round(dt_eval / dt)
-        self.initialize_results(num_beats, dt_eval)
+        self.initialize_results()
 
         if checkpoint > 0:
             checkoint_every_n_steps = np.round(checkpoint / dt)
@@ -299,9 +322,11 @@ class CirculationModel(ABC):
 
         for beat in range(num_beats):
             logger.info(f"Solving beat {beat}")
-            for i, t in enumerate(self.times_one_beat(dt)):
+            for i, t in enumerate(times_one_beat):
                 self.callback(self, t, False)
+
                 self.step(t, dt)
+
                 if i % output_every_n_steps == 0:
                     self.store()
                 if self._verbose:
@@ -324,7 +349,7 @@ class CirculationModel(ABC):
             history[name] = self.results_state[i, :]
         for i, name in enumerate(type(self).var_names()):
             history[name] = self.results_var[i, :]
-        history["time"] = self.times
+        history["time"] = self.times_eval
         return history
 
     def store(self):
@@ -338,7 +363,7 @@ class CirculationModel(ABC):
         np.savetxt(self.outdir / "state.txt", self.state)
         np.savetxt(self.outdir / "results_state.txt", self.results_state)
         np.savetxt(self.outdir / "results_var.txt", self.results_var)
-        np.savetxt(self.outdir / "time.txt", self.times)
+        np.savetxt(self.outdir / "time.txt", self.times_eval)
         np.savetxt(self.outdir / "var_names.txt", self.var_names(), fmt="%s")
         np.savetxt(self.outdir / "state_names.txt", self.states_names, fmt="%s")
 
