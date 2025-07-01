@@ -1,5 +1,8 @@
 # # Regazzoni 2020 with scipy
 
+# In this example we show how to use `scipy.integrate.solve_ivp` to solve the ODEs of the Regazzoni 2020 model.
+# We also compare the results with the `circulation` package's built-in solver (which uses a forward euler scheme).
+
 from circulation.log import setup_logging
 from circulation.regazzoni2020 import Regazzoni2020
 import matplotlib.pyplot as plt

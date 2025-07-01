@@ -6,6 +6,7 @@ parts:
     chapters:
     - file: "examples/regazzoni.py"
     - file: "examples/zenker.py"
+    - file: "examples/regazzoni_scipy.py"
     - file: "examples/regazzoni_bleeding.py"
     - file: "examples/bestel.py"
   - caption: Python API

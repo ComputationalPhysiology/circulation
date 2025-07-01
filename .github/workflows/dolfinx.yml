@@ -1,0 +1,25 @@
+name: Test dolfinx example
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  dolfinx:
+    name: Run dolfinx example
+    runs-on: ubuntu-24.04
+    container: "ghcr.io/fenics/dolfinx/dolfinx:v0.9.0"
+    env:
+      DEB_PYTHON_INSTALL_LAYOUT: deb_system
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install package
+        run: |
+          python3 -m pip install scifem --no-build-isolation
+          python3 -m pip install .[demos]
+
+      - name: Run tests
+        run: python3 examples/regazzoni_dolfinx.py
