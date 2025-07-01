@@ -19,7 +19,7 @@ class Zenker(base.CirculationModel):
         https://doi.org/10.1371/journal.pcbi.0030204
     """
 
-    def __init__(self, parameters: dict[str, float] | None = None, **kwargs):
+    def __init__(self, parameters: dict[str, float | int] | None = None, **kwargs):
         super().__init__(parameters, **kwargs)
         self._initialize()
 
@@ -77,7 +77,7 @@ class Zenker(base.CirculationModel):
 
     @property
     def HR(self):
-        return self.fHR(self.state["S"])
+        return self.fHR(self.state[2])
 
     def R_TPR(self, S):
         R_TPR_min = self.parameters["R_TPR_min"]
@@ -94,12 +94,12 @@ class Zenker(base.CirculationModel):
         Vv0_max = self.parameters["Vv0_max"]
         return Vv0_min + (Vv0_max - Vv0_min) * (1 - S)
 
-    def update_static_variables(self, t):
-        V_ES = self.state["V_ES"]
-        V_ED = self.state["V_ED"]
-        S = self.state["S"]
-        Va = self.state["Va"]
-        Vv = self.state["Vv"]
+    def update_static_variables(self, t, y):
+        V_ES = y[0]
+        V_ED = y[1]
+        S = y[2]
+        Va = y[3]
+        Vv = y[4]
 
         Ca = self.parameters["Ca"]
         Cv = self.parameters["Cv"]
@@ -113,18 +113,20 @@ class Zenker(base.CirculationModel):
         IC = (Pa - Pcvp) / R_TPR  # Eq 18
         ICO = fHR * (V_ED - V_ES)  # Eq 19
 
-        self.var["fHR"] = fHR
-        self.var["R_TPR"] = R_TPR
-        self.var["C_PRSW"] = C_PRSW
-        self.var["Vv0"] = Vv0
-        self.var["TotalVolume"] = Va + Vv  # + Vv0 + Va0
+        var = self._get_var(t)
+        var[0] = fHR
+        var[1] = R_TPR
+        var[2] = C_PRSW
+        var[3] = Vv0
+        var[4] = Va + Vv  # + Vv0 + Va0
 
-        self.var["Pa"] = Pa  # Eq 17
-        self.var["Pcvp"] = Pcvp  # Eq 17
-        self.var["IC"] = IC  # Eq 18
-        self.var["ICO"] = ICO  # Eq 19
+        var[5] = Pa  # Eq 17
+        var[6] = Pcvp  # Eq 17
+        var[7] = IC  # Eq 18
+        var[8] = ICO  # Eq 19
 
-        self.var["I_ext"] = base.external_blood(**self.parameters, t=t)
+        var[9] = base.external_blood(**self.parameters, t=t)
+        return var
 
     def p_LV_func(self, V_LV, t=0.0):
         P0_LV = self.parameters["P0_LV"]
@@ -170,31 +172,56 @@ class Zenker(base.CirculationModel):
             (k1 / k3) * (np.exp(-k2 * k3 * t) - 1) + np.exp(-k2 * (V_ES + k3 * t))
         )
 
-    def step(self, t, dt):
-        self.update_static_variables(t)
+    @staticmethod
+    def var_names() -> list[str]:
+        return [
+            "fHR",
+            "R_TPR",
+            "C_PRSW",
+            "Vv0",
+            "TotalVolume",
+            "Pa",
+            "Pcvp",
+            "IC",
+            "ICO",
+            "I_ext",
+        ]
 
-        V_ES = self.state["V_ES"]
-        V_ED = self.state["V_ED"]
-        S = self.state["S"]
+    @staticmethod
+    def state_names() -> list[str]:
+        return [
+            "V_ES",
+            "V_ED",
+            "S",
+            "Va",
+            "Vv",
+        ]
+
+    def rhs(self, t, y):
+        var = self.update_static_variables(t, y)
+
+        V_ES = y[0]
+        V_ED = y[1]
+        S = y[2]
         tau_Baro = self.parameters["tau_Baro"]
         k_width = self.parameters["k_width"]
         Pa_set = self.parameters["Pa_set"]
 
-        fHR = self.var["fHR"]
-        C_PRSW = self.var["C_PRSW"]
-        Pa = self.var["Pa"]
-        Pcvp = self.var["Pcvp"]
-        IC = self.var["IC"]
-        ICO = self.var["ICO"]
-        I_ext = self.var["I_ext"]
+        fHR = var[0]
+        C_PRSW = var[2]
+        Pa = var[5]
+        Pcvp = var[6]
+        IC = var[7]
+        ICO = var[8]
+        I_ext = var[9]
 
         # Added minus sign to match the other code
         dVa_dt = -(IC - ICO)  # Eq 20
-
         dS_dt = (1 / tau_Baro) * (1 - (1 / (1 + np.exp(-k_width * (Pa - Pa_set)))) - S)
 
-        self.state["Va"] += dt * dVa_dt
-        self.state["Vv"] += dt * (-dVa_dt + I_ext)  # Eq 20
-        self.state["V_ES"] += dt * (self.V_ES(V_ED, C_PRSW, Pa, t) - V_ES) * fHR
-        self.state["V_ED"] += dt * (self.V_ED(V_ES, fHR, Pcvp, t) - V_ED) * fHR
-        self.state["S"] += dt * dS_dt
+        self.dy[0] = (self.V_ES(V_ED, C_PRSW, Pa, t) - V_ES) * fHR
+        self.dy[1] = (self.V_ED(V_ES, fHR, Pcvp, t) - V_ED) * fHR
+        self.dy[2] = dS_dt
+        self.dy[3] = dVa_dt
+        self.dy[4] = -dVa_dt + I_ext  # Eq 20
+        return self.dy

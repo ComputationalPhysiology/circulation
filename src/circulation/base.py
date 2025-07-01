@@ -3,8 +3,9 @@ from typing import Callable, Any, Protocol
 from pathlib import Path
 from abc import ABC, abstractmethod
 import json
-from collections import defaultdict
+
 import numpy as np
+import numpy.typing as npt
 import time
 import logging
 from rich.table import Table
@@ -43,12 +44,11 @@ def external_blood(
     flow_infusion: float,
     **kwargs,
 ) -> float:
-    if start_withdrawal <= t < end_withdrawal:
-        return flow_withdrawal
-    elif start_infusion <= t < end_infusion:
-        return flow_infusion
-    else:
-        return 0.0
+    return np.where(
+        np.logical_and(start_withdrawal <= t, t < end_withdrawal),
+        flow_withdrawal,
+        np.where(np.logical_and(start_infusion <= t, t < end_infusion), flow_infusion, 0.0),
+    )
 
 
 class CallBack(Protocol):
@@ -113,16 +113,17 @@ class CirculationModel(ABC):
         comm=None,
         callback_save_state: CallBack | None = None,
         initial_state: dict[str, float] | None = None,
+        theta: float = 0.5,
     ):
         self.parameters = type(self).default_parameters()
         if parameters is not None:
             self.parameters = deep_update(self.parameters, parameters)
 
         self._add_units = add_units
+        self._theta = theta
 
-        self.state = type(self).default_initial_conditions()
-        if initial_state is not None:
-            self.state.update(initial_state)
+        self._initial_state = type(self).default_initial_conditions()
+        self.update_inital_state(initial_state)
 
         table = Table(title=f"Circulation model parameters ({type(self).__name__})")
         table.add_column("Parameter")
@@ -133,12 +134,12 @@ class CirculationModel(ABC):
         table = Table(title=f"Circulation model initial states ({type(self).__name__})")
         table.add_column("State")
         table.add_column("Value")
-        recuursive_table(self.state, table)
+        recuursive_table(self._initial_state, table)
         logger.info(f"\n{log.log_table(table)}")
 
         if not add_units:
             self.parameters = remove_units(self.parameters)
-            self.state = remove_units(self.state)
+        self.dy = np.zeros_like(self.state)
 
         self.outdir = outdir
         outdir.mkdir(exist_ok=True, parents=True)
@@ -162,17 +163,60 @@ class CirculationModel(ABC):
         log.setup_logging(level=loglevel)
         self._comm = comm
 
+    def update_static_variables_external(self, t: float, y: np.ndarray) -> None: ...
+
+    def update_inital_state(self, state: dict[str, float] | None = None):
+        if state is not None:
+            self._initial_state.update(state)
+
+        self.state = np.array(list(remove_units(self._initial_state).values()), dtype=np.float64)
+        self.state_old = np.copy(self.state)
+
+    @property
+    def states_names(self):
+        return list(self._initial_state.keys())
+
+    @property
+    def num_states(self):
+        return len(self.state)
+
+    @staticmethod
+    @abstractmethod
+    def var_names():
+        return []
+
+    @abstractmethod
+    def rhs(self, t: float, y: npt.NDArray) -> npt.NDArray: ...
+
+    @property
+    def num_vars(self):
+        return len(type(self).var_names())
+
+    @property
+    def state_theta(self):
+        return self._theta * self.state + (1 - self._theta) * self.state_old
+
     def _initialize(self):
-        self.var = {}
-        self.results = defaultdict(list)
-
-        self.update_static_variables(0.0)
-
+        self.var = np.zeros(self.num_vars, dtype=np.float64)
         if self._comm is None or (self._comm is not None and self._comm.rank == 0):
             # Dump parameters to file
             (self.outdir / "parameters.json").write_text(json.dumps(self.parameters, indent=2))
             # Dump initial conditions to file
-            (self.outdir / "initial_conditions.json").write_text(json.dumps(self.state, indent=2))
+            (self.outdir / "initial_conditions.json").write_text(
+                json.dumps(remove_units(self._initial_state), indent=2)
+            )
+
+    def initialize_results(self):
+        N = len(self.times_eval)
+        self.results_state = np.zeros((self.num_states, N))
+        self.results_state[:, 0] = self.state
+
+        self.rhs(0.0, self.state)
+
+        self.results_var = np.zeros((self.num_vars, N))
+        self.results_var[:, 0] = self.var
+
+        self._index = 1
 
     @property
     @abstractmethod
@@ -183,10 +227,6 @@ class CirculationModel(ABC):
     @staticmethod
     @abstractmethod
     def default_parameters() -> dict[str, Any]: ...
-
-    @abstractmethod
-    def update_static_variables(self, t: float):
-        pass
 
     @staticmethod
     @abstractmethod
@@ -218,79 +258,141 @@ class CirculationModel(ABC):
             * smooth_heavyside((v - w) / unit_p)
         )
 
-    @abstractmethod
-    def step(self, t: float, dt: float) -> None: ...
+    def times_n_beats(self, dt: float, n: int = 1) -> np.ndarray:
+        return np.arange(0, n / self.HR, dt)
+
+    def step(self, t, dt):
+        dy = self.rhs(t, self.state)
+        self.state += dt * dy
+
+    def _get_var(self, t):
+        try:
+            float(t)  # type: ignore[arg-type]
+        except TypeError:
+            var = np.zeros((len(self.var), len(t)), dtype=float)  # type: ignore[arg-type]
+        else:
+            var = self.var
+        return var
 
     def solve(
         self,
+        num_beats: int | None = None,
         T: float | None = None,
-        num_cycles: int | None = None,
         initial_state: dict[str, float] | None = None,
         dt: float = 1e-3,
         dt_eval: float | None = None,
         checkpoint: int = 0,
     ):
-        logger.info("Running circulation model")
-        if T is None:
-            assert num_cycles is not None, "Please provide num_cycles or T"
-            T = num_cycles / self.HR
-
-        initial_state = initial_state or dict()
-
         if dt_eval is None:
-            output_every_n_steps = 1
-        else:
-            output_every_n_steps = np.round(dt_eval / dt)
+            dt_eval = dt
+        output_every_n_steps = int(np.round(dt_eval / dt))
 
+        if num_beats is None and T is None:
+            raise ValueError("Need to specify either number of beats or total time")
+        elif num_beats is None:
+            num_beats = 1
+            assert T is not None, "If num_beats is None, T must be specified"
+            times_one_beat = np.arange(0, T, dt)
+
+        else:
+            if T is not None:
+                logger.warning("Ignoring T, using num_beats instead")
+            times_one_beat = self.times_n_beats(dt, n=1)
+            T = (times_one_beat[-1] + dt) * num_beats
+
+        N = (
+            sum(
+                1
+                for _ in range(num_beats)
+                for i in range(len(times_one_beat))
+                if i % output_every_n_steps == 0
+            )
+            + 1
+        )
+
+        self.times_eval = np.linspace(0, T, N)
+        logger.info("Running circulation model")
+
+        if initial_state is None:
+            initial_state = type(self).default_initial_conditions()
+        elif isinstance(initial_state, (list, np.ndarray, tuple)):
+            initial_state = dict(zip(self.states_names, initial_state))
+        else:
+            assert isinstance(
+                initial_state, dict
+            ), "initial_state must be a dict or convertible to one"
+
+        self.initialize_results()
         if checkpoint > 0:
             checkoint_every_n_steps = np.round(checkpoint / dt)
         else:
             checkoint_every_n_steps = np.inf
 
         if initial_state is not None:
-            self.state.update(initial_state)
+            self.update_inital_state(initial_state)
 
         t = 0.0
         if self._add_units:
             t *= units.ureg("s")
             dt *= units.ureg("s")
-        else:
-            self.state = remove_units(self.state)
 
         time_start = time.time()
-        i = 0
-        while t < T:
-            if i % output_every_n_steps == 0:
-                self.store(t)
-            self.callback(self, t, i % output_every_n_steps == 0)
 
-            self.step(t, dt)
-            if self._verbose:
-                self.print_info()
+        for beat in range(num_beats):
+            logger.info(f"Solving beat {beat}")
+            for i, t in enumerate(times_one_beat):
+                self.callback(self, t, False)
 
-            if i % checkoint_every_n_steps == 0:
-                self.save_state()
-            t += dt
-            i += 1
+                self.step(t, dt)
+
+                if i % output_every_n_steps == 0:
+                    self.store()
+                if self._verbose:
+                    self.print_info()
+                if i % checkoint_every_n_steps == 0:
+                    self.save_state()
+
         duration = time.time() - time_start
 
         logger.info(f"Done running circulation model in {duration:.2f} s")
         self.save_state()
-        return self.results
 
-    def store(self, t):
-        get = lambda x: float(np.copy(x)) if not self._add_units else x.magnitude
+        return self.history
 
-        self.results["time"].append(get(t))
-        for k, v in self.state.items():
-            self.results[k].append(get(v))
-        for k, v in self.var.items():
-            self.results[k].append(get(v))
+    @property
+    def history(self):
+        history = {}
+        for i, name in enumerate(self.states_names):
+            history[name] = self.results_state[i, :]
+        for i, name in enumerate(type(self).var_names()):
+            history[name] = self.results_var[i, :]
+        history["time"] = self.times_eval
+        return history
+
+    def store(self):
+        try:
+            self.results_state[:, self._index] = self.state[:]
+        except IndexError:
+            logger.warning(
+                "IndexError when storing results, this is likely due that the "
+                "HR and times for evaluations are not divisible by dt_eval. "
+                "This will result in a loss of data. Please check your "
+                "parameters."
+            )
+        else:
+            self.results_var[:, self._index] = self.var[:]
+        finally:
+            self._index += 1
 
     def save_state(self):
         self.callback_save_state(self)
-        (self.outdir / "state.json").write_text(json.dumps(self.state, indent=2))
-        (self.outdir / "results.json").write_text(json.dumps(self.results, indent=2))
+
+        np.savetxt(self.outdir / "state.txt", self.state)
+        np.savetxt(self.outdir / "results_state.txt", self.results_state)
+        np.savetxt(self.outdir / "results_var.txt", self.results_var)
+        np.savetxt(self.outdir / "time.txt", self.times_eval)
+        np.savetxt(self.outdir / "var_names.txt", self.var_names(), fmt="%s")
+        np.savetxt(self.outdir / "state_names.txt", self.states_names, fmt="%s")
 
     @property
     def volumes(self) -> dict[str, float]:

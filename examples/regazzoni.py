@@ -9,11 +9,29 @@ import matplotlib.pyplot as plt
 setup_logging()
 circulation = Regazzoni2020()
 
-circulation.print_info()
+from scipy.integrate import solve_ivp
+import numpy as np
 
-history = circulation.solve(
-    num_cycles=10,
-)
+
+# res = solve_ivp(
+#     circulation.rhs,
+#     [0, 5],
+#     circulation.state_arr,
+#     t_eval=np.linspace(0, 5, 1000),
+#     method="RK45",
+#     max_step=1e-3,
+# )
+# plt.plot(res.y[0, :])
+# plt.plot(res.y[1, :])
+# plt.show()
+# breakpoint()
+
+
+
+# circulation.print_info()
+# history = circulation.results
+
+history = circulation.solve(num_beats=10)
 circulation.print_info()
 
 fig, ax = plt.subplots(1, 2, sharex=True, sharey=True, figsize=(10, 5))
