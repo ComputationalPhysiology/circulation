@@ -318,9 +318,9 @@ class CirculationModel(ABC):
         elif isinstance(initial_state, (list, np.ndarray, tuple)):
             initial_state = dict(zip(self.states_names, initial_state))
         else:
-            assert isinstance(
-                initial_state, dict
-            ), "initial_state must be a dict or convertible to one"
+            assert isinstance(initial_state, dict), (
+                "initial_state must be a dict or convertible to one"
+            )
 
         self.initialize_results()
         if checkpoint > 0:
