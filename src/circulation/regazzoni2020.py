@@ -66,6 +66,7 @@ class Regazzoni2020(base.CirculationModel):
         parameters: dict[str, Any] | None = None,
         p_LV: Callable[[float, float], float] | None = None,
         p_RV: Callable[[float, float], float] | None = None,
+        p_BiV: Callable[[float, float, float], tuple[float, float]] | None = None,
         add_units=False,
         callback: base.CallBack | None = None,
         verbose: bool = False,
@@ -105,24 +106,33 @@ class Regazzoni2020(base.CirculationModel):
             valves["PV"]["Rmin"], valves["PV"]["Rmax"], unit_R=unit_R, unit_p=unit_p
         )
 
-        E_LA = self.time_varying_elastance(**chambers["LA"])
-        self.p_LA = lambda V, t: E_LA(t) * (V - chambers["LA"]["V0"])
+        self._E_LA = self.time_varying_elastance(**chambers["LA"])
+        self.p_LA = lambda V, t: self._E_LA(t) * (V - chambers["LA"]["V0"])
 
-        if p_LV is not None:
-            self.p_LV = p_LV
+        # If p_BiV is provided, we use it to calculate the pressures in both LV and RV
+        if p_BiV is not None:
+            self.p_BiV = p_BiV
+            self._E_LV = lambda t: 1.0
+            self._E_RV = lambda t: 1.0
+
         else:
-            # Use default time varying elastance model
-            E_LV = self.time_varying_elastance(**chambers["LV"])
-            self.p_LV = lambda V, t: E_LV(t) * (V - chambers["LV"]["V0"])
+            if p_LV is not None:
+                self.p_LV = p_LV
+                self._E_LV = lambda t: 1.0  # Dummy function, not used
+            else:
+                # Use default time varying elastance model
+                self._E_LV = self.time_varying_elastance(**chambers["LV"])
+                self.p_LV = lambda V, t: self._E_LV(t) * (V - chambers["LV"]["V0"])
 
-        E_RA = self.time_varying_elastance(**chambers["RA"])
-        self.p_RA = lambda V, t: E_RA(t) * (V - chambers["RA"]["V0"])
+            self._E_RA = self.time_varying_elastance(**chambers["RA"])
+            self.p_RA = lambda V, t: self._E_RA(t) * (V - chambers["RA"]["V0"])
 
-        if p_RV is not None:
-            self.p_RV = p_RV
-        else:
-            E_RV = self.time_varying_elastance(**chambers["RV"])
-            self.p_RV = lambda V, t: E_RV(t) * (V - chambers["RV"]["V0"])
+            if p_RV is not None:
+                self.p_RV = p_RV
+                self._E_RV = lambda t: 1.0  # Dummy function, not used
+            else:
+                self._E_RV = self.time_varying_elastance(**chambers["RV"])
+                self.p_RV = lambda V, t: self._E_RV(t) * (V - chambers["RV"]["V0"])
 
         self._initialize()
 
@@ -267,16 +277,119 @@ class Regazzoni2020(base.CirculationModel):
         # Q_VEN_PUL = y[11]
 
         var = self._get_var(t)
+        if hasattr(self, "p_BIV"):
+            p_LV, p_RV = self.p_BiV(V_LV, V_RV, t)
+        else:
+            p_LV = self.p_LV(V_LV, t)
+            p_RV = self.p_RV(V_RV, t)
+
         var[0] = self.p_LA(V_LA, t)
-        var[1] = self.p_LV(V_LV, t)
+        var[1] = p_LV
         var[2] = self.p_RA(V_RA, t)
-        var[3] = self.p_RV(V_RV, t)
+        var[3] = p_RV
         var[4] = self.flux_through_valve(var[0], var[1], self.R_MV)
         var[5] = self.flux_through_valve(var[1], p_AR_SYS, self.R_AV)
         var[6] = self.flux_through_valve(var[2], var[3], self.R_TV)
         var[7] = self.flux_through_valve(var[3], p_AR_PUL, self.R_PV)
         var[8] = base.external_blood(**self.parameters["circulation"]["external"], t=t)
         return var
+
+    def jac(self, t, y):
+        """
+        Returns the Jacobian of the system of equations.
+        The Jacobian is a 2D numpy array with shape (12, 12).
+        """
+
+        C_VEN_SYS = self.parameters["circulation"]["SYS"]["C_VEN"]
+        C_AR_SYS = self.parameters["circulation"]["SYS"]["C_AR"]
+        C_VEN_PUL = self.parameters["circulation"]["PUL"]["C_VEN"]
+        C_AR_PUL = self.parameters["circulation"]["PUL"]["C_AR"]
+        R_AR_SYS = self.parameters["circulation"]["SYS"]["R_AR"]
+        R_VEN_SYS = self.parameters["circulation"]["SYS"]["R_VEN"]
+        R_AR_PUL = self.parameters["circulation"]["PUL"]["R_AR"]
+        R_VEN_PUL = self.parameters["circulation"]["PUL"]["R_VEN"]
+        L_AR_SYS = self.parameters["circulation"]["SYS"]["L_AR"]
+        L_VEN_SYS = self.parameters["circulation"]["SYS"]["L_VEN"]
+        L_AR_PUL = self.parameters["circulation"]["PUL"]["L_AR"]
+        L_VEN_PUL = self.parameters["circulation"]["PUL"]["L_VEN"]
+        E_LA = self._E_LA(t)
+        E_LV = self._E_LV(t)
+        E_RA = self._E_RA(t)
+        E_RV = self._E_RV(t)
+        var = self._get_var(t)
+        R_MV = self.R_MV(var[0], var[1])
+        R_AV = self.R_AV(var[1], y[4])
+        R_TV = self.R_TV(var[2], var[3])
+        R_PV = self.R_PV(var[3], y[6])
+
+        return np.array(
+            [
+                [-E_LA / R_MV, E_LV / R_MV, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+                [E_LA / R_MV, -E_LV / R_MV - E_LV / R_AV, 0, 0, 1 / R_AV, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, -E_RA / R_TV, E_RV / R_TV, 0, 0, 0, 0, 0, 1, 0, 0],
+                [0, 0, E_RA / R_TV, -E_RV / R_TV - E_RV / R_PV, 0, 0, 1 / R_PV, 0, 0, 0, 0, 0],
+                [
+                    0,
+                    E_LV / (C_AR_SYS * R_AV),
+                    0,
+                    0,
+                    -1 / (C_AR_SYS * R_AV),
+                    0,
+                    0,
+                    0,
+                    -1 / C_AR_SYS,
+                    0,
+                    0,
+                    0,
+                ],
+                [0, 0, 0, 0, 0, 0, 0, 0, 1 / C_VEN_SYS, -1 / C_VEN_SYS, 0, 0],
+                [
+                    0,
+                    0,
+                    0,
+                    E_RV / (C_AR_PUL * R_PV),
+                    0,
+                    0,
+                    -1 / (C_AR_PUL * R_PV),
+                    0,
+                    0,
+                    0,
+                    -1 / C_AR_PUL,
+                    0,
+                ],
+                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1 / C_VEN_PUL, -1 / C_VEN_PUL],
+                [0, 0, 0, 0, 1 / L_AR_SYS, -1 / L_AR_SYS, 0, 0, -R_AR_SYS / L_AR_SYS, 0, 0, 0],
+                [
+                    0,
+                    0,
+                    -E_RA / L_VEN_SYS,
+                    0,
+                    0,
+                    1 / L_VEN_SYS,
+                    0,
+                    0,
+                    0,
+                    -R_VEN_SYS / L_VEN_SYS,
+                    0,
+                    0,
+                ],
+                [0, 0, 0, 0, 0, 0, 1 / L_AR_PUL, -1 / L_AR_PUL, 0, 0, -R_AR_PUL / L_AR_PUL, 0],
+                [
+                    -E_LA / L_VEN_PUL,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    1 / L_VEN_PUL,
+                    0,
+                    0,
+                    0,
+                    -R_VEN_PUL / L_VEN_PUL,
+                ],
+            ]
+        )
 
     def rhs(self, t, y):
         # V_LA = y[0]

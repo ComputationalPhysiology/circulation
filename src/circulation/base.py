@@ -52,10 +52,10 @@ def external_blood(
 
 
 class CallBack(Protocol):
-    def __call__(self, model: "CirculationModel", t: float = 0, save: bool = True) -> None: ...
+    def __call__(self, model: "CirculationModel", i: int = 0, t: float = 0, **kwargs) -> None: ...
 
 
-def dummy_callback(model: "CirculationModel", t: float = 0, save: bool = True) -> None:
+def dummy_callback(model: "CirculationModel", i: int = 0, t: float = 0, **kwargs) -> None:
     pass
 
 
@@ -261,9 +261,9 @@ class CirculationModel(ABC):
     def times_n_beats(self, dt: float, n: int = 1) -> np.ndarray:
         return np.arange(0, n / self.HR, dt)
 
-    def step(self, t, dt):
-        dy = self.rhs(t, self.state)
-        self.state += dt * dy
+    # def step(self, t, dt):
+    #     dy = self.rhs(t, self.state)
+    #     self.state += dt * dy
 
     def _get_var(self, t):
         try:
@@ -282,6 +282,7 @@ class CirculationModel(ABC):
         dt: float = 1e-3,
         dt_eval: float | None = None,
         checkpoint: int = 0,
+        method: str = "forward_euler",
     ):
         if dt_eval is None:
             dt_eval = dt
@@ -341,10 +342,42 @@ class CirculationModel(ABC):
         for beat in range(num_beats):
             logger.info(f"Solving beat {beat}")
             for i, t in enumerate(times_one_beat):
-                self.callback(self, t, False)
+                if method == "forward_euler":
+                    dy = self.rhs(t, self.state)
+                    self.state += dt * dy
 
-                self.step(t, dt)
+                elif method == "backward_euler":
+                    from scipy.optimize import root
 
+                    old_state = np.copy(self.state)
+
+                    def f(s):
+                        return s - old_state - dt * self.rhs(t, s)
+
+                    res = root(f, old_state)
+                    self.state[:] = res.x
+                else:
+                    from scipy.integrate import solve_ivp
+
+                    jac = None
+                    if hasattr(self, "jac"):
+                        jac = self.jac
+
+                    res = solve_ivp(
+                        self.rhs,
+                        [t, t + dt],
+                        self.state,
+                        t_eval=[t + dt],
+                        method=method,
+                        jac=jac,
+                    )
+                    self.state[:] = res.y[:, -1]
+
+                    # if self._comm is not None:
+                    #     sol = self._comm.bcast(sol, root=0)
+                    # self.state[:] = sol
+
+                self.callback(self, beat * len(times_one_beat) + i, t)
                 if i % output_every_n_steps == 0:
                     self.store()
                 if self._verbose:
