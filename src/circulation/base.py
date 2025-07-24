@@ -200,7 +200,9 @@ class CirculationModel(ABC):
         self.var = np.zeros(self.num_vars, dtype=np.float64)
         if self._comm is None or (self._comm is not None and self._comm.rank == 0):
             # Dump parameters to file
-            (self.outdir / "parameters.json").write_text(json.dumps(self.parameters, indent=2))
+            (self.outdir / "parameters.json").write_text(
+                json.dumps(remove_units(self.parameters), indent=2)
+            )
             # Dump initial conditions to file
             (self.outdir / "initial_conditions.json").write_text(
                 json.dumps(remove_units(self._initial_state), indent=2)
@@ -319,9 +321,9 @@ class CirculationModel(ABC):
         elif isinstance(initial_state, (list, np.ndarray, tuple)):
             initial_state = dict(zip(self.states_names, initial_state))
         else:
-            assert isinstance(
-                initial_state, dict
-            ), "initial_state must be a dict or convertible to one"
+            assert isinstance(initial_state, dict), (
+                "initial_state must be a dict or convertible to one"
+            )
 
         self.initialize_results()
         if checkpoint > 0:
