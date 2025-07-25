@@ -379,7 +379,11 @@ class CirculationModel(ABC):
                     #     sol = self._comm.bcast(sol, root=0)
                     # self.state[:] = sol
 
-                self.callback(self, beat * len(times_one_beat) + i, t)
+                self.callback(
+                    self,
+                    beat * len(times_one_beat) + i,
+                    beat * times_one_beat[-1] + t,
+                )
                 if i % output_every_n_steps == 0:
                     self.store()
                 if self._verbose:

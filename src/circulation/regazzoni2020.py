@@ -124,15 +124,15 @@ class Regazzoni2020(base.CirculationModel):
                 self._E_LV = self.time_varying_elastance(**chambers["LV"])
                 self.p_LV = lambda V, t: self._E_LV(t) * (V - chambers["LV"]["V0"])
 
-            self._E_RA = self.time_varying_elastance(**chambers["RA"])
-            self.p_RA = lambda V, t: self._E_RA(t) * (V - chambers["RA"]["V0"])
+        self._E_RA = self.time_varying_elastance(**chambers["RA"])
+        self.p_RA = lambda V, t: self._E_RA(t) * (V - chambers["RA"]["V0"])
 
-            if p_RV is not None:
-                self.p_RV = p_RV
-                self._E_RV = lambda t: 1.0  # Dummy function, not used
-            else:
-                self._E_RV = self.time_varying_elastance(**chambers["RV"])
-                self.p_RV = lambda V, t: self._E_RV(t) * (V - chambers["RV"]["V0"])
+        if p_RV is not None:
+            self.p_RV = p_RV
+            self._E_RV = lambda t: 1.0  # Dummy function, not used
+        else:
+            self._E_RV = self.time_varying_elastance(**chambers["RV"])
+            self.p_RV = lambda V, t: self._E_RV(t) * (V - chambers["RV"]["V0"])
 
         self._initialize()
 
@@ -277,7 +277,7 @@ class Regazzoni2020(base.CirculationModel):
         # Q_VEN_PUL = y[11]
 
         var = self._get_var(t)
-        if hasattr(self, "p_BIV"):
+        if hasattr(self, "p_BiV"):
             p_LV, p_RV = self.p_BiV(V_LV, V_RV, t)
         else:
             p_LV = self.p_LV(V_LV, t)
