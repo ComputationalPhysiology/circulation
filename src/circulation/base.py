@@ -292,12 +292,14 @@ class CirculationModel(ABC):
 
         if num_beats is None and T is None:
             raise ValueError("Need to specify either number of beats or total time")
-        elif num_beats is None:
+
+        elif T is not None:
+            # Choose T first, then num_beats
             num_beats = 1
-            assert T is not None, "If num_beats is None, T must be specified"
             times_one_beat = np.arange(0, T, dt)
 
         else:
+            assert num_beats is not None, "If T is None, num_beats must be specified"
             if T is not None:
                 logger.warning("Ignoring T, using num_beats instead")
             times_one_beat = self.times_n_beats(dt, n=1)
