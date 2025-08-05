@@ -6,7 +6,8 @@ name = "circulation"
 version = "0.1.6"
 description = "Closed loop blood circulation model in FEniCS"
 authors = [{ name = "Henrik Finsberg", email = "henriknf@simula.no" }]
-license = { file = "LICENSE" }
+license = "MIT"
+license-files = ["LICENSE"]
 readme = "README.md"
 dependencies = [
     "numpy",
