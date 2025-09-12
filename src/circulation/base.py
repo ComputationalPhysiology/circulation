@@ -114,6 +114,7 @@ class CirculationModel(ABC):
         callback_save_state: CallBack | None = None,
         initial_state: dict[str, float] | None = None,
         theta: float = 0.5,
+        reset_callback: CallBack | None = None,
     ):
         self.parameters = type(self).default_parameters()
         if parameters is not None:
@@ -158,6 +159,13 @@ class CirculationModel(ABC):
         else:
             self.callback_save_state = dummy_callback
 
+        if reset_callback is not None:
+            assert callable(reset_callback), "reset_callback must be callable"
+
+            self.reset_callback = reset_callback
+        else:
+            self.reset_callback = dummy_callback
+
         self._verbose = verbose
         loglevel = logging.DEBUG if verbose else logging.INFO
         log.setup_logging(level=loglevel)
@@ -198,6 +206,7 @@ class CirculationModel(ABC):
 
     def _initialize(self):
         self.var = np.zeros(self.num_vars, dtype=np.float64)
+        self.var_old = np.copy(self.var)
         if self._comm is None or (self._comm is not None and self._comm.rank == 0):
             # Dump parameters to file
             (self.outdir / "parameters.json").write_text(
@@ -285,6 +294,7 @@ class CirculationModel(ABC):
         dt_eval: float | None = None,
         checkpoint: int = 0,
         method: str = "forward_euler",
+        max_failures: int = 10,
     ):
         if dt_eval is None:
             dt_eval = dt
@@ -346,40 +356,73 @@ class CirculationModel(ABC):
         for beat in range(num_beats):
             logger.info(f"Solving beat {beat}")
             for i, t in enumerate(times_one_beat):
-                if method == "forward_euler":
-                    dy = self.rhs(t, self.state)
-                    self.state += dt * dy
+                converged = False
+                num_failures = 0
+                ti = t
+                dti = dt
 
-                elif method == "backward_euler":
-                    from scipy.optimize import root
+                while not converged:
+                    self.state_old[:] = self.state.copy()
 
-                    old_state = np.copy(self.state)
+                    try:
+                        if method == "forward_euler":
+                            dy = self.rhs(ti, self.state)
+                            self.state += dti * dy
 
-                    def f(s):
-                        return s - old_state - dt * self.rhs(t, s)
+                        elif method == "backward_euler":
+                            from scipy.optimize import root
 
-                    res = root(f, old_state)
-                    self.state[:] = res.x
-                else:
-                    from scipy.integrate import solve_ivp
+                            old_state = np.copy(self.state)
 
-                    jac = None
-                    if hasattr(self, "jac"):
-                        jac = self.jac
+                            def f(s):
+                                return s - old_state - dt * self.rhs(t, s)
 
-                    res = solve_ivp(
-                        self.rhs,
-                        [t, t + dt],
-                        self.state,
-                        t_eval=[t + dt],
-                        method=method,
-                        jac=jac,
-                    )
-                    self.state[:] = res.y[:, -1]
+                            res = root(f, old_state)
+                            self.state[:] = res.x
+                        else:
+                            from scipy.integrate import solve_ivp
 
-                    # if self._comm is not None:
-                    #     sol = self._comm.bcast(sol, root=0)
-                    # self.state[:] = sol
+                            jac = None
+                            if hasattr(self, "jac"):
+                                jac = self.jac
+
+                            res = solve_ivp(
+                                self.rhs,
+                                [t, t + dt],
+                                self.state,
+                                t_eval=[t + dt],
+                                method=method,
+                                jac=jac,
+                            )
+                            self.state[:] = res.y[:, -1]
+                    except RuntimeError:
+                        logger.warning(
+                            f"RuntimeError at beat {beat}, step {i}, time {ti:.3f} s, "
+                            "trying to reduce time step"
+                        )
+                        num_failures += 1
+                        self.state[:] = self.state_old.copy()
+                        self.reset_callback(self, i, ti)
+                        dti *= 0.5
+                        ti = t - dti
+
+                        if num_failures > max_failures:
+                            logger.error(
+                                f"Failed to converge after {num_failures} attempts at "
+                                f"beat {beat}, step {i}, time {ti:.3f} s, "
+                                "reducing time step too much, aborting"
+                            )
+                            raise RuntimeError(
+                                "Failed to converge after too many attempts, "
+                                "reducing time step too much"
+                            )
+                    else:
+                        converged = True
+                        ti += dti
+
+                        # if self._comm is not None:
+                        #     sol = self._comm.bcast(sol, root=0)
+                        # self.state[:] = sol
 
                 self.callback(
                     self,
