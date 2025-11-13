@@ -21,7 +21,7 @@ requires-python = ">=3.11"
 test = ["pytest", "pytest-cov", "scipy"]
 demos = ["matplotlib", "scipy"]
 docs = [
-    "jupyter-book",
+    "jupyter-book<2.0",
      "jupytext",
      "circulation[demos]",
      "sphinxcontrib-bibtex",
