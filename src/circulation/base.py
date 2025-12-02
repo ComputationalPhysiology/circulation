@@ -328,23 +328,20 @@ class CirculationModel(ABC):
         self.times_eval = np.linspace(0, T, N)
         logger.info("Running circulation model")
 
-        if initial_state is None:
-            initial_state = type(self).default_initial_conditions()
-        elif isinstance(initial_state, (list, np.ndarray, tuple)):
-            initial_state = dict(zip(self.states_names, initial_state))
-        else:
-            assert isinstance(initial_state, dict), (
-                "initial_state must be a dict or convertible to one"
-            )
+        if initial_state is not None:
+            if isinstance(initial_state, (list, np.ndarray, tuple)):
+                initial_state = dict(zip(self.states_names, initial_state))
+            else:
+                assert isinstance(initial_state, dict), (
+                    "initial_state must be a dict or convertible to one"
+                )
+            self.update_inital_state(initial_state)
 
         self.initialize_results()
         if checkpoint > 0:
             checkoint_every_n_steps = np.round(checkpoint / dt)
         else:
             checkoint_every_n_steps = np.inf
-
-        if initial_state is not None:
-            self.update_inital_state(initial_state)
 
         t = 0.0
         if self._add_units:
