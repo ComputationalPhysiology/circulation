@@ -31,6 +31,7 @@
 # These are the physiological values we want the model to reproduce.
 
 # %%
+import os
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import minimize, Bounds
@@ -235,13 +236,13 @@ bounds = interface.get_bounds()
 
 # Reset counter
 iteration_counter[0] = 0
-
+maxiter = 20 if os.getenv("CI") else 1000 # Limit iterations for CI environments
 result = minimize(
     cost_function,
     x0,
     method='Nelder-Mead',
     bounds=Bounds([b[0] for b in bounds], [b[1] for b in bounds]),
-    options={'maxiter': 1000, 'xatol': 1e-4, 'fatol': 1e-4, 'disp': True}
+    options={'maxiter': maxiter, 'xatol': 1e-4, 'fatol': 1e-4, 'disp': True}
 )
 
 print("\n" + "="*60)
@@ -294,6 +295,7 @@ axs[1].set_title(f"Right Ventricle (Target: {targets['RV_ESP']}/{targets['RV_EDP
 axs[1].set_xlabel("Volume [mL]")
 axs[1].set_ylabel("Pressure [mmHg]")
 axs[1].axhline(targets['RV_ESP'], color='k', ls=':', alpha=0.5)
+axs[1].axhline(targets['RV_EDP'], color='k', ls=':', alpha=0.5)
 axs[1].grid(True, alpha=0.3)
 
 plt.tight_layout()

@@ -21,6 +21,7 @@
 
 # %% tags=["hide-input"]
 # region [Imports & Setup]
+import os
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import minimize, Bounds
@@ -183,13 +184,13 @@ print("\nStarting PH Optimization...")
 x0 = interface.get_initial_guess()
 bounds = interface.get_bounds()
 iteration_counter[0] = 0
-
+maxiter = 20 if os.getenv("CI") else 1000 # Limit iterations for CI environments
 result = minimize(
     cost_function,
     x0,
     method='Nelder-Mead',
     bounds=Bounds([b[0] for b in bounds], [b[1] for b in bounds]),
-    options={'maxiter': 500, 'xatol': 1e-4, 'disp': True}
+    options={'maxiter': maxiter, 'xatol': 1e-4, 'disp': True}
 )
 
 print("\nOptimization Complete!")
