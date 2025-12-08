@@ -140,6 +140,8 @@ class CirculationModel(ABC):
 
         if not add_units:
             self.parameters = remove_units(self.parameters)
+            self._initial_state = remove_units(self._initial_state)
+
         self.dy = np.zeros_like(self.state)
 
         self.outdir = outdir
