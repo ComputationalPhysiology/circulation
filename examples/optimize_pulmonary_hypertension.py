@@ -3,7 +3,7 @@
 #
 # This demo shows how to take the **Healthy Baseline** model (which is the default) and evolve it into a **Pulmonary Hypertension (PH)** disease state.
 #
-# For a detailed explanation of the optimization strategy and the core physics of the model, please refer to the **[Healthy Baseline Optimization]({doc}`/examples/optimize_healthy_baseline.py`)** script.
+# For a detailed explanation of the optimization strategy and the core physics of the model, please refer to the **[Healthy Baseline Optimization](optimize_healthy_baseline.py)** script.
 #
 # ## Pathophysiology: The Disease State
 # Pulmonary Hypertension is defined by a specific set of mechanical failures and biological compensations.
