@@ -130,13 +130,15 @@ class CirculationModel(ABC):
         table.add_column("Parameter")
         table.add_column("Value")
         recuursive_table(self.parameters, table)
-        logger.info(f"\n{log.log_table(table)}")
+        if logger.isEnabledFor(logging.INFO):
+            logger.info(f"\n{log.log_table(table)}")
 
         table = Table(title=f"Circulation model initial states ({type(self).__name__})")
         table.add_column("State")
         table.add_column("Value")
         recuursive_table(self._initial_state, table)
-        logger.info(f"\n{log.log_table(table)}")
+        if logger.isEnabledFor(logging.INFO):
+            logger.info(f"\n{log.log_table(table)}")
 
         if not add_units:
             self.parameters = remove_units(self.parameters)
