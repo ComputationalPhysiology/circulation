@@ -229,18 +229,18 @@ class Regazzoni2020(base.CirculationModel):
     @staticmethod
     def default_initial_conditions() -> dict[str, float]:
         return {
-            "V_LA": 80.0 * mL,
-            "V_LV": 110.0 * mL,
-            "V_RA": 80.0 * mL,
-            "V_RV": 110.0 * mL,
-            "p_AR_SYS": 70.0 * mmHg,
-            "p_VEN_SYS": 28.32334306787334 * mmHg,
-            "p_AR_PUL": 25.0 * mmHg,
-            "p_VEN_PUL": 20.0 * mmHg,
-            "Q_AR_SYS": 0.0 * mL / s,
-            "Q_VEN_SYS": 0.0 * mL / s,
-            "Q_AR_PUL": 0.0 * mL / s,
-            "Q_VEN_PUL": 0.0 * mL / s,
+            "V_LA": 87.183 * mL,
+            "V_LV": 118.520 * mL,
+            "V_RA": 86.833 * mL,
+            "V_RV": 166.177 * mL,
+            "p_AR_SYS": 87.675 * mmHg,
+            "p_VEN_SYS": 35.898 * mmHg,
+            "p_AR_PUL": 19.545 * mmHg,
+            "p_VEN_PUL": 15.004 * mmHg,
+            "Q_AR_SYS": 71.104 * mL / s,
+            "Q_VEN_SYS": 94.039 * mL / s,
+            "Q_AR_PUL": 94.084 * mL / s,
+            "Q_VEN_PUL": 473.279 * mL / s,
         }
 
     @staticmethod
