@@ -6,9 +6,12 @@ parts:
     chapters:
     - file: "examples/regazzoni.py"
     - file: "examples/zenker.py"
-    - file: "examples/regazzoni_scipy.py"
-    - file: "examples/regazzoni_bleeding.py"
     - file: "examples/bestel.py"
+    - file: "examples/regazzoni_scipy.py"
+    - file: "examples/regazzoni_vco_experiment.py"
+    - file: "examples/optimize_healthy_baseline.py"
+    - file: "examples/optimize_pulmonary_hypertension.py"
+    - file: "examples/regazzoni_bleeding.py"
   - caption: Python API
     chapters:
     - file: "docs/api"
