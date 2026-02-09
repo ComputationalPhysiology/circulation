@@ -106,8 +106,8 @@ class BestelActivation:
 
         # print(f"Solving active stress model with parameters: {pprint.pformat(params)}")
 
-        f = (
-            lambda t: 0.25
+        f = lambda t: (
+            0.25
             * (1 + math.tanh((t - ps["t_sys"]) / ps["gamma"]))
             * (1 - math.tanh((t - ps["t_dias"]) / ps["gamma"]))
         )
@@ -286,8 +286,8 @@ class BestelPressure:
 
     def __call__(self, t, p):
         ps = self.parameters
-        f = (
-            lambda t: 0.25
+        f = lambda t: (
+            0.25
             * (1 + math.tanh((t - ps["t_sys_pre"]) / ps["gamma"]))
             * (1 - math.tanh((t - ps["t_dias_pre"]) / ps["gamma"]))
         )
