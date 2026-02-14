@@ -267,10 +267,14 @@ class CirculationModel(ABC):
         unit_R: float = 1.0,
         unit_p: float = 1.0,
     ) -> Callable[[float, float], float]:
-        return lambda w, v: unit_R * 10.0 ** (
-            np.log10(Rmin / unit_R)
-            + (np.log10(Rmax / unit_R) - np.log10(Rmin / unit_R))
-            * smooth_heavyside((v - w) / unit_p)
+        return lambda w, v: (
+            unit_R
+            * 10.0
+            ** (
+                np.log10(Rmin / unit_R)
+                + (np.log10(Rmax / unit_R) - np.log10(Rmin / unit_R))
+                * smooth_heavyside((v - w) / unit_p)
+            )
         )
 
     def times_n_beats(self, dt: float, n: int = 1) -> np.ndarray:
