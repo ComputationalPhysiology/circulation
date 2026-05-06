@@ -140,10 +140,14 @@ class Zenker(base.CirculationModel):
         P_ED = self.p_LV_func(V_ED, t)
         V_ED0 = self.parameters["V_ED0"]
 
-        if Pa > P_ED:
+        if Pa <= P_ED:
             return V_ED0
-        # Eq 5
-        return V_ED - ((C_PRSW * (V_ED - V_ED0)) / (Pa - P_ED))
+
+        SV_raw = C_PRSW * (V_ED - V_ED0) / (Pa - P_ED)
+        SV = np.clip(SV_raw, 0.0, V_ED - V_ED0)
+        V_ES = V_ED - SV
+
+        return max(V_ES, V_ED0)
 
     def V_ED(self, V_ES, fHR, Pcvp, t):
         # Eq 13
