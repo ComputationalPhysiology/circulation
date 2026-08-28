@@ -18,7 +18,7 @@ requires-python = ">=3.11"
 
 
 [project.optional-dependencies]
-test = ["pytest", "pytest-cov", "scipy"]
+test = ["pytest", "pytest-cov", "scipy", "gotranx"]
 demos = ["matplotlib", "scipy"]
 docs = [
     "jupyter-book<2.0",
@@ -35,6 +35,9 @@ all = [
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+circulation = ["*.ode"]
 
 
 [tool.pytest.ini_options]

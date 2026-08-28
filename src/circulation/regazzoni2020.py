@@ -13,6 +13,70 @@ mmHg = units.ureg("mmHg")
 s = units.ureg("s")
 
 
+#: The same model written in gotranx's `.ode` language. Kept in step with the
+#: implementation below by `tests/test_regazzoni_ode_equivalence.py`.
+ODE_FILE = Path(__file__).parent / "regazzoni2020.ode"
+
+#: Steepness of the smooth diode in :func:`circulation.base.smooth_heavyside`,
+#: which hard-codes it. The `.ode` file exposes it as a parameter, so it has to
+#: be repeated here to keep the two descriptions of the model identical.
+VALVE_STEEPNESS = 200.0
+
+
+def flat_ode_parameters(parameters: dict[str, Any] | None = None) -> dict[str, float]:
+    """Translate the nested parameter dictionary into `.ode` parameter names.
+
+    The `.ode` file needs a flat namespace, so ``parameters["circulation"]["SYS"]
+    ["C_AR"]`` becomes ``C_AR_SYS`` and ``parameters["chambers"]["LV"]["EA"]``
+    becomes ``EA_LV``.
+
+    Two entries are computed rather than copied. The activation offsets
+    ``tC_eff_*`` and ``tR_eff_*`` are the contraction and relaxation onsets
+    reduced modulo the beat length. The `.ode` file applies each chamber's
+    offset to the beat phase with a single wrap, which is exact only if both
+    lie in ``[0, RR)`` -- and the published offsets do not (``tC`` for the
+    atria is 0.9 s against a 0.8 s beat at the default heart rate). Reducing
+    them here is what makes the wrap correct.
+
+    Parameters
+    ----------
+    parameters : dict[str, Any] | None
+        Nested parameters as returned by :meth:`Regazzoni2020.default_parameters`,
+        with units already removed. Defaults to the model's own defaults.
+
+    Returns
+    -------
+    dict[str, float]
+        Keyword arguments for the generated ``init_parameter_values``.
+    """
+    if parameters is None:
+        parameters = base.remove_units(Regazzoni2020.default_parameters())
+
+    RR = 1.0 / float(parameters["HR"])
+    flat: dict[str, float] = {"RR": RR, "valve_steepness": VALVE_STEEPNESS}
+
+    for valve in ("MV", "AV", "TV", "PV"):
+        flat[f"Rmin_{valve}"] = float(parameters["valves"][valve]["Rmin"])
+        flat[f"Rmax_{valve}"] = float(parameters["valves"][valve]["Rmax"])
+
+    for side in ("SYS", "PUL"):
+        compartment = parameters["circulation"][side]
+        for key in ("R_AR", "C_AR", "R_VEN", "C_VEN", "L_AR", "L_VEN"):
+            flat[f"{key}_{side}"] = float(compartment[key])
+
+    for name in ("LA", "LV", "RA", "RV"):
+        chamber = parameters["chambers"][name]
+        for key in ("EA", "EB", "TC", "TR", "V0"):
+            flat[f"{key}_{name}"] = float(chamber[key])
+        flat[f"tC_eff_{name}"] = float(chamber["tC"]) % RR
+        flat[f"tR_eff_{name}"] = (float(chamber["tC"]) + float(chamber["TC"])) % RR
+
+    for key, value in parameters["circulation"]["external"].items():
+        flat[key] = float(value)
+
+    return flat
+
+
 def list2array(lst):
     if hasattr(lst, "__len__"):
         # Turn the object into a numpy array
